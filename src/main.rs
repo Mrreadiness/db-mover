@@ -3,6 +3,7 @@ use reader::DBReader;
 use writer::DBWriter;
 use uri::URI;
 
+mod row;
 mod channel;
 mod reader;
 mod writer;
