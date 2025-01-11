@@ -86,7 +86,7 @@ impl DBReader for SqliteDB {
                 result.push(Value::from(row.get_ref_unwrap(idx)));
             }
             sender
-                .send_blocking(result)
+                .send(result)
                 .expect("Failed to send data to queue");
         }
     }
@@ -96,7 +96,7 @@ impl DBWriter for SqliteDB {
     fn start_writing(&self, reciever: Reciever, table: &str) {
         let batch_size = 100_000;
         let mut batch: Vec<Row> = Vec::with_capacity(batch_size);
-        while let Ok(row) = reciever.recv_blocking() {
+        while let Ok(row) = reciever.recv() {
             batch.push(row);
             if batch.len() == batch_size {
                 self.write_batch(&batch, table);

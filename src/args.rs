@@ -2,7 +2,7 @@ use clap::Parser;
 use crate::uri::URI;
 
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(version, about, long_about = None)]
 #[command(next_line_help = true)]
 pub struct Args {

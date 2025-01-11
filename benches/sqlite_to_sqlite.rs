@@ -35,16 +35,17 @@ fn fill_table(conn: &Connection, table_name: &str, num_rows: usize) -> anyhow::R
     }
     return Ok(());
 }
-
-fn sqlite_to_sqlite_benchmark(c: &mut Criterion) {
+fn benchmark(c: &mut Criterion, num_rows: usize) {
     let tmp_dir = tempfile::tempdir().unwrap();
     let input_db_path = tmp_dir.path().join("input.db");
     let output_db_path = tmp_dir.path().join("output.db");
 
     let in_conn = create_sqlite_db(&input_db_path).unwrap();
-    fill_table(&in_conn, "test", 10000).unwrap();
+    fill_table(&in_conn, "test", num_rows).unwrap();
 
-    c.bench_function("main sqlite to sqlite", |b| {
+    let name = format!("sqlite to sqlite {num_rows}");
+
+    c.bench_function(&name, |b| {
         b.iter(|| {
             let args = db_mover::args::Args {
                 input: db_mover::uri::URI::Sqlite(format!(
@@ -67,5 +68,18 @@ fn sqlite_to_sqlite_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, sqlite_to_sqlite_benchmark);
+fn benchmark_10_000(c: &mut Criterion) {
+    benchmark(c, 10_000);
+}
+
+fn benchmark_100_000(c: &mut Criterion) {
+    benchmark(c, 100_000);
+}
+
+
+criterion_group! {
+    name = benches;
+    config = Criterion::default();
+    targets = benchmark_10_000, benchmark_100_000,
+}
 criterion_main!(benches);
