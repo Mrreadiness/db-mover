@@ -20,20 +20,26 @@ fn create_sqlite_db<T: AsRef<Path>>(path: T) -> anyhow::Result<Connection> {
             | OpenFlags::SQLITE_OPEN_CREATE
             | OpenFlags::SQLITE_OPEN_URI,
     )?;
-    conn.execute(
-        "CREATE TABLE test (id INTEGER PRIMARY KEY, real REAL, text TEXT, blob BLOB)",
-        [],
-    )?;
+    create_table(&conn, "test")?;
+    create_table(&conn, "test1")?;
     return Ok(conn);
 }
 
-fn fill_test_table(conn: &Connection, num_rows: usize) -> anyhow::Result<()> {
+fn create_table(conn: &Connection, table_name: &str) -> anyhow::Result<()> {
+    let query = format!(
+        "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY, real REAL, text TEXT, blob BLOB)"
+    );
+    conn.execute(&query, [])?;
+    return Ok(());
+}
+
+fn fill_table(conn: &Connection, table_name: &str, num_rows: usize) -> anyhow::Result<()> {
+    let query = format!("INSERT INTO {table_name} VALUES (?1, ?2, ?3, ?4)");
+    let mut stmt = conn.prepare(&query)?;
+
     for i in 1..num_rows + 1 {
         let data = Faker.fake::<(f64, String, Vec<u8>)>();
-        conn.execute(
-            "INSERT INTO test VALUES (?1, ?2, ?3, ?4)",
-            params![i, data.0, data.1, data.2],
-        )?;
+        stmt.execute(params![i, data.0, data.1, data.2])?;
     }
     return Ok(());
 }
@@ -47,9 +53,14 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<TestRow> {
     });
 }
 
-fn are_dbs_equal(conn1: &Connection, conn2: &Connection) -> anyhow::Result<bool> {
-    let mut stmt1 = conn1.prepare("SELECT * FROM test ORDER BY id")?;
-    let mut stmt2 = conn2.prepare("SELECT * FROM test ORDER BY id")?;
+fn are_tables_equal(
+    conn1: &Connection,
+    conn2: &Connection,
+    table_name: &str,
+) -> anyhow::Result<bool> {
+    let query = format!("SELECT * FROM {table_name} ORDER BY id");
+    let mut stmt1 = conn1.prepare(&query)?;
+    let mut stmt2 = conn2.prepare(&query)?;
     let mut rows1 = stmt1.query_map([], from_row)?;
     let mut rows2 = stmt2.query_map([], from_row)?;
 
@@ -68,6 +79,10 @@ fn are_dbs_equal(conn1: &Connection, conn2: &Connection) -> anyhow::Result<bool>
         return Ok(true);
     }
     return Ok(false);
+}
+
+fn are_dbs_equal(conn1: &Connection, conn2: &Connection) -> anyhow::Result<bool> {
+    return Ok(are_tables_equal(conn1, conn2, "test")? && are_tables_equal(conn1, conn2, "test1")?);
 }
 
 #[test]
@@ -115,7 +130,7 @@ fn one_table() -> anyhow::Result<()> {
     let output_db_path = tmp_dir.path().join("output.db");
 
     let in_conn = create_sqlite_db(&input_db_path)?;
-    fill_test_table(&in_conn, 1000)?;
+    fill_table(&in_conn, "test", 1000)?;
     let out_conn = create_sqlite_db(&output_db_path)?;
     assert!(!are_dbs_equal(&in_conn, &out_conn)?);
 
@@ -126,6 +141,33 @@ fn one_table() -> anyhow::Result<()> {
             output_db_path.to_str().unwrap()
         )),
         table: vec!["test".to_owned()],
+        queue_size: Some(100_000),
+    };
+    db_mover::run(args);
+
+    assert!(are_dbs_equal(&in_conn, &out_conn)?);
+    return Ok(());
+}
+
+#[test]
+fn multiple_tables() -> anyhow::Result<()> {
+    let tmp_dir = tempfile::tempdir()?;
+    let input_db_path = tmp_dir.path().join("input.db");
+    let output_db_path = tmp_dir.path().join("output.db");
+
+    let in_conn = create_sqlite_db(&input_db_path)?;
+    fill_table(&in_conn, "test", 1000)?;
+    fill_table(&in_conn, "test1", 100)?;
+    let out_conn = create_sqlite_db(&output_db_path)?;
+    assert!(!are_dbs_equal(&in_conn, &out_conn)?);
+
+    let args = db_mover::args::Args {
+        input: db_mover::uri::URI::Sqlite(format!("sqlite://{}", input_db_path.to_str().unwrap())),
+        output: db_mover::uri::URI::Sqlite(format!(
+            "sqlite://{}",
+            output_db_path.to_str().unwrap()
+        )),
+        table: vec!["test".to_owned(), "test1".to_owned()],
         queue_size: Some(100_000),
     };
     db_mover::run(args);
