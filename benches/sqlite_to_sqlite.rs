@@ -1,9 +1,11 @@
 use db_mover::{self, reader::DBReader, writer::DBWriter};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use fake::{Fake, Faker};
-use rusqlite::{params, Connection, OpenFlags};
-use std::{fs::remove_file, path::Path};
+use rusqlite::{Connection, OpenFlags};
+use std::{
+    fs::remove_file,
+    path::{Path, PathBuf},
+};
 use tempfile;
 
 fn create_sqlite_db<T: AsRef<Path>>(path: T) -> anyhow::Result<Connection> {
@@ -25,26 +27,11 @@ fn create_table(conn: &Connection, table_name: &str) -> anyhow::Result<()> {
     return Ok(());
 }
 
-fn fill_table(conn: &Connection, table_name: &str, num_rows: usize) -> anyhow::Result<()> {
-    let query = format!("INSERT INTO {table_name} VALUES (?1, ?2, ?3, ?4)");
-    let mut stmt = conn.prepare(&query)?;
-
-    for i in 1..num_rows + 1 {
-        let data = Faker.fake::<(f64, String, Vec<u8>)>();
-        stmt.execute(params![i, data.0, data.1, data.2])?;
-    }
-    return Ok(());
-}
-
-fn benchmark(c: &mut Criterion, num_rows: usize) {
+fn benchmark(c: &mut Criterion) {
+    let input_db_path = PathBuf::from("benches/data/input.db");
     let tmp_dir = tempfile::tempdir().unwrap();
-    let input_db_path = tmp_dir.path().join("input.db");
     let output_db_path = tmp_dir.path().join("output.db");
 
-    let in_conn = create_sqlite_db(&input_db_path).unwrap();
-    fill_table(&in_conn, "test", num_rows).unwrap();
-
-    let name = format!("sqlite to sqlite {num_rows}");
     let args = db_mover::args::Args {
         input: db_mover::uri::URI::Sqlite(format!("sqlite://{}", input_db_path.to_str().unwrap())),
         output: db_mover::uri::URI::Sqlite(format!(
@@ -55,7 +42,7 @@ fn benchmark(c: &mut Criterion, num_rows: usize) {
         queue_size: Some(10_000),
     };
 
-    c.bench_function(&name, |b| {
+    c.bench_function("sqlite to sqlite", |b| {
         b.iter(|| {
             create_sqlite_db(&output_db_path).unwrap();
 
@@ -66,61 +53,37 @@ fn benchmark(c: &mut Criterion, num_rows: usize) {
     });
 }
 
-fn benchmark_10_000(c: &mut Criterion) {
-    benchmark(c, 10_000);
-}
+fn benchmark_reader(c: &mut Criterion) {
+    let input_db_path = PathBuf::from("benches/data/input.db");
 
-fn benchmark_100_000(c: &mut Criterion) {
-    benchmark(c, 100_000);
-}
-
-fn benchmark_reader(c: &mut Criterion, num_rows: usize) {
-    let tmp_dir = tempfile::tempdir().unwrap();
-    let input_db_path = tmp_dir.path().join("input.db");
-
-    let in_conn = create_sqlite_db(&input_db_path).unwrap();
-    fill_table(&in_conn, "test", num_rows).unwrap();
-
-    let name = format!("sqlite reader {num_rows}");
-
-    c.bench_function(&name, |b| {
+    c.bench_function("sqlite reader", |b| {
         b.iter(|| {
-            let (sender, _reciver) = db_mover::channel::create_channel(Some(100_000));
+            let (sender, _reciver) = db_mover::channel::create_channel(None);
             let reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
             reader.start_reading(sender, "test");
         })
     });
 }
 
-fn benchmark_reader_10_000(c: &mut Criterion) {
-    benchmark_reader(c, 10_000);
-}
-
-fn benchmark_reader_100_000(c: &mut Criterion) {
-    benchmark_reader(c, 100_000);
-}
-
-fn benchmark_writer(c: &mut Criterion, num_rows: usize) {
+fn benchmark_writer(c: &mut Criterion) {
     let tmp_dir = tempfile::tempdir().unwrap();
     let output_db_path = tmp_dir.path().join("output.db");
 
-    let name = format!("sqlite writer {num_rows}");
-    let mut data = Vec::with_capacity(num_rows);
-    use db_mover::row::Value;
-    for i in 1..num_rows + 1 {
-        let row = Faker.fake::<(f64, String, Vec<u8>)>();
-        data.push(vec![
-            Value::I64(i as i64),
-            Value::F64(row.0),
-            Value::String(row.1),
-            Value::Bytes(row.2),
-        ]);
+    let mut data = Vec::new();
+    {
+        let input_db_path = PathBuf::from("benches/data/input.db");
+        let (sender, reciver) = db_mover::channel::create_channel(None);
+        let reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
+        reader.start_reading(sender, "test");
+        for row in reciver.iter() {
+            data.push(row);
+        }
     }
 
-    c.bench_function(&name, |b| {
+    c.bench_function("sqlite writer", |b| {
         b.iter_batched(
             || {
-                let (sender, reciver) = db_mover::channel::create_channel(Some(num_rows));
+                let (sender, reciver) = db_mover::channel::create_channel(Some(data.len()));
                 for el in &data {
                     sender.send(el.to_owned()).unwrap();
                 }
@@ -140,27 +103,9 @@ fn benchmark_writer(c: &mut Criterion, num_rows: usize) {
     });
 }
 
-fn benchmark_writer_10_000(c: &mut Criterion) {
-    benchmark_writer(c, 10_000);
-}
-
-fn benchmark_writer_100_000(c: &mut Criterion) {
-    benchmark_writer(c, 100_000);
-}
-
 criterion_group! {
     name = benches;
     config = Criterion::default();
-    targets = benchmark_10_000, benchmark_100_000,
+    targets = benchmark, benchmark_reader, benchmark_writer,
 }
-criterion_group! {
-    name = benches_reader;
-    config = Criterion::default();
-    targets = benchmark_reader_10_000, benchmark_reader_100_000,
-}
-criterion_group! {
-    name = benches_writer;
-    config = Criterion::default();
-    targets = benchmark_writer_10_000, benchmark_writer_100_000,
-}
-criterion_main!(benches, benches_reader, benches_writer);
+criterion_main!(benches);
