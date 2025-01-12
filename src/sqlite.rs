@@ -72,7 +72,7 @@ impl ToSql for Value {
 }
 
 impl DBReader for SqliteDB {
-    fn start_reading(&self, sender: Sender, table: &str) {
+    fn start_reading(&mut self, sender: Sender, table: &str) {
         let query = format!("select * from {table}");
         let mut stmt = self
             .connection

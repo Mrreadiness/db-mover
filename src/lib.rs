@@ -1,11 +1,9 @@
-use reader::DBReader;
-use writer::DBWriter;
-
 pub mod args;
 pub mod channel;
 pub mod reader;
 pub mod row;
 pub mod sqlite;
+pub mod postgres;
 pub mod uri;
 pub mod writer;
 
@@ -17,7 +15,7 @@ pub fn run(args: args::Args) {
             let args = args.clone();
             let table = table.clone();
             move || {
-                let reader = args.input.create_reader();
+                let mut reader = args.input.create_reader();
                 reader.start_reading(sender, &table);
             }
         });
