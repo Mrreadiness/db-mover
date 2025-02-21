@@ -31,3 +31,10 @@ Run benchmark:
 ```bash
 cargo bench
 ```
+
+### Pre-commit hooks
+
+Install pre-commit hooks
+```bash
+pre-commit install
+```

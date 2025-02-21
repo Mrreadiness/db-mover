@@ -24,3 +24,6 @@ tempfile = "3.15.0"
 [[bench]]
 name = "sqlite_to_sqlite"
 harness = false
+
+[lints.clippy]
+needless_return = "allow"

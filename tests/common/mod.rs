@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 pub mod postgres;
-pub mod sqlite;
 pub mod row;
+pub mod sqlite;
 
 use rand::distr::{slice::Choose, Distribution};
 

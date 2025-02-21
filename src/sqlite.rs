@@ -24,7 +24,7 @@ impl SqliteDB {
         return Ok(SqliteDB { connection: conn });
     }
 
-    fn write_batch(&self, batch: &Vec<Row>, table: &str) {
+    fn write_batch(&self, batch: &[Row], table: &str) {
         let placeholder = format!(
             "({})",
             batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
@@ -85,9 +85,7 @@ impl DBReader for SqliteDB {
             for idx in 0..column_count {
                 result.push(Value::from(row.get_ref_unwrap(idx)));
             }
-            sender
-                .send(result)
-                .expect("Failed to send data to queue");
+            sender.send(result).expect("Failed to send data to queue");
         }
     }
 }

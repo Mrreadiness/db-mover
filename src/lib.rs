@@ -1,9 +1,9 @@
 pub mod args;
 pub mod channel;
+pub mod postgres;
 pub mod reader;
 pub mod row;
 pub mod sqlite;
-pub mod postgres;
 pub mod uri;
 pub mod writer;
 

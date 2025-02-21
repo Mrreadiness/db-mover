@@ -1,6 +1,5 @@
-use clap::Parser;
 use crate::uri::URI;
-
+use clap::Parser;
 
 #[derive(Parser, Clone)]
 #[command(version, about, long_about = None)]
