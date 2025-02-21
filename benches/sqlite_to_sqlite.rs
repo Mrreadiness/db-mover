@@ -59,7 +59,7 @@ fn benchmark_reader(c: &mut Criterion) {
     c.bench_function("sqlite reader", |b| {
         b.iter(|| {
             let (sender, _reciver) = db_mover::channel::create_channel(None);
-            let reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
+            let mut reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
             reader.start_reading(sender, "test");
         })
     });
@@ -73,7 +73,7 @@ fn benchmark_writer(c: &mut Criterion) {
     {
         let input_db_path = PathBuf::from("benches/data/input.db");
         let (sender, reciver) = db_mover::channel::create_channel(None);
-        let reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
+        let mut reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
         reader.start_reading(sender, "test");
         for row in reciver.iter() {
             data.push(row);
