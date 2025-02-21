@@ -1,0 +1,83 @@
+use fake::{Fake, Faker};
+use postgres::{Client, NoTls};
+
+use super::{gen_database_name, row::TestRow};
+
+pub struct TestPostresDatabase {
+    name: String,
+    pub uri: String,
+    pub client: Client,
+    base_client: Client,
+}
+
+impl TestPostresDatabase {
+    pub fn new() -> Self {
+        let base_uri =
+            std::env::var("POSTGRES_URI").expect("POSTGRES_URI env is required to run this test");
+
+        let db_name_separtor = base_uri
+            .rfind("/")
+            .expect("Failed to find database name separtor in the URI");
+        let (base_uri_without_db, _) = base_uri.split_at(db_name_separtor);
+        let name = gen_database_name();
+        let uri = format!("{base_uri_without_db}/{name}");
+
+        let mut base_client = Client::connect(&base_uri, NoTls)
+            .expect("Unable to connect to postgres database for tests");
+        let query = format!("CREATE DATABASE {name}");
+        base_client
+            .execute(&query, &[])
+            .expect("Unable to create database in postgres to run tests");
+
+        let client = Client::connect(&uri, NoTls)
+            .expect("Unable to connect to the database created for tests");
+
+        return Self {
+            name,
+            uri,
+            client,
+            base_client,
+        };
+    }
+
+    pub fn create_test_table(&mut self, name: &str) {
+        let query = format!(
+        "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real DOUBLE PRECISION, text TEXT, blob BYTEA)"
+        );
+        self.client
+            .execute(&query, &[])
+            .expect("Failed to create table");
+    }
+
+    pub fn fill_test_table(&mut self, name: &str, num_rows: usize) {
+        let query = format!("INSERT INTO {name} VALUES ($1, $2, $3, $4)");
+        let stmt = self.client.prepare(&query).unwrap();
+
+        for i in 1..num_rows + 1 {
+            let data = Faker.fake::<(f64, String, Vec<u8>)>();
+            self.client
+                .execute(&stmt, &[&(i as i64), &data.0, &data.1, &data.2])
+                .unwrap();
+        }
+    }
+
+    pub fn get_all_rows(&mut self, table_name: &str) -> Vec<TestRow> {
+        let query = format!("SELECT * FROM {table_name} ORDER BY id");
+
+        let stmt = self.client.prepare(&query).unwrap();
+        return self
+            .client
+            .query(&stmt, &[])
+            .unwrap()
+            .into_iter()
+            .map(|row| row.into())
+            .collect();
+    }
+}
+
+impl Drop for TestPostresDatabase {
+    fn drop(&mut self) {
+        let query = format!("DROP DATABASE {} WITH (FORCE)", self.name);
+        self.base_client.execute(&query, &[]).unwrap();
+    }
+}
