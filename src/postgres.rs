@@ -1,3 +1,4 @@
+use anyhow::Context;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::types::Type;
 use postgres::{Client, NoTls};
@@ -17,19 +18,22 @@ impl PostgresDB {
 }
 
 impl DBReader for PostgresDB {
-    fn start_reading(&mut self, sender: Sender, table: &str) {
+    fn start_reading(&mut self, sender: Sender, table: &str) -> anyhow::Result<()> {
         let query = format!("select * from {table}");
         let stmt = self
             .client
             .prepare(&query)
-            .expect("Failed to prepare select statement");
+            .context("Failed to prepare select statement")?;
         let columns = stmt.columns();
         let mut rows = self
             .client
             .query_raw(&stmt, &[] as &[&str; 0])
-            .expect("Failed to get data from postgres source");
+            .context("Failed to get data from postgres source")?;
 
-        while let Some(row) = rows.next().expect("Error while reading data from postgres") {
+        while let Some(row) = rows
+            .next()
+            .context("Error while reading data from postgres")?
+        {
             let mut result: Row = Vec::with_capacity(columns.len());
             for (idx, column) in columns.iter().enumerate() {
                 let value = match column.type_() {
@@ -49,7 +53,10 @@ impl DBReader for PostgresDB {
                 };
                 result.push(value);
             }
-            sender.send(result).expect("Failed to send data to queue");
+            sender
+                .send(result)
+                .context("Failed to send data to queue")?;
         }
+        return Ok(());
     }
 }

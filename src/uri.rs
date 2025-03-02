@@ -1,5 +1,7 @@
 use std::str::FromStr;
 
+use anyhow::Context;
+
 use crate::postgres::PostgresDB;
 use crate::reader::DBReader;
 use crate::sqlite::SqliteDB;
@@ -12,24 +14,26 @@ pub enum URI {
 }
 
 impl URI {
-    pub fn create_reader(&self) -> Box<dyn DBReader> {
-        match self {
+    pub fn create_reader(&self) -> anyhow::Result<Box<dyn DBReader>> {
+        let reader: Box<dyn DBReader> = match self {
             URI::Sqlite(uri) => {
-                return Box::new(SqliteDB::new(uri).expect("Unable to connect to the sqlite"));
+                Box::new(SqliteDB::new(uri).context("Unable to connect to the sqlite")?)
             }
             URI::Postgres(uri) => {
-                return Box::new(PostgresDB::new(uri).expect("Unable to connect to the postgres"));
+                Box::new(PostgresDB::new(uri).context("Unable to connect to the postgres")?)
             }
-        }
+        };
+        return Ok(reader);
     }
 
-    pub fn create_writer(&self) -> Box<dyn DBWriter> {
-        match self {
+    pub fn create_writer(&self) -> anyhow::Result<Box<dyn DBWriter>> {
+        let writer: Box<dyn DBWriter> = match self {
             URI::Sqlite(uri) => {
-                return Box::new(SqliteDB::new(uri).expect("Unable to connect to the sqlite"));
+                Box::new(SqliteDB::new(uri).context("Unable to connect to the sqlite")?)
             }
             _ => panic!("FIXME"),
-        }
+        };
+        return Ok(writer);
     }
 }
 

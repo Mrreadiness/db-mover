@@ -1,6 +1,6 @@
 use clap::Parser;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = db_mover::args::Args::parse();
-    db_mover::run(args);
+    return db_mover::run(args);
 }

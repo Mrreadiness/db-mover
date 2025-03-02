@@ -24,7 +24,7 @@ fn empty() {
         table: vec![],
         queue_size: Some(100_000),
     };
-    db_mover::run(args);
+    db_mover::run(args).unwrap();
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
@@ -35,7 +35,7 @@ fn empty() {
         table: vec!["test".to_owned()],
         queue_size: Some(100_000),
     };
-    db_mover::run(args);
+    db_mover::run(args).unwrap();
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
@@ -55,7 +55,7 @@ fn one_table() {
         table: vec!["test".to_owned()],
         queue_size: Some(100_000),
     };
-    db_mover::run(args);
+    db_mover::run(args).unwrap();
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
@@ -76,7 +76,7 @@ fn multiple_tables() {
         table: vec!["test".to_owned(), "test1".to_owned()],
         queue_size: Some(100_000),
     };
-    db_mover::run(args);
+    db_mover::run(args).unwrap();
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));

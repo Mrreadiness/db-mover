@@ -46,7 +46,7 @@ fn benchmark(c: &mut Criterion) {
         b.iter(|| {
             create_sqlite_db(&output_db_path).unwrap();
 
-            db_mover::run(args.clone());
+            db_mover::run(args.clone()).unwrap();
 
             remove_file(&output_db_path).unwrap();
         })
@@ -61,7 +61,7 @@ fn benchmark_reader(c: &mut Criterion) {
             let (sender, _reciver) = db_mover::channel::create_channel(None);
             let mut reader =
                 db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
-            reader.start_reading(sender, "test");
+            reader.start_reading(sender, "test").unwrap();
         })
     });
 }
@@ -75,7 +75,7 @@ fn benchmark_writer(c: &mut Criterion) {
         let input_db_path = PathBuf::from("benches/data/input.db");
         let (sender, reciver) = db_mover::channel::create_channel(None);
         let mut reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
-        reader.start_reading(sender, "test");
+        reader.start_reading(sender, "test").unwrap();
         for row in reciver.iter() {
             data.push(row);
         }
@@ -95,7 +95,7 @@ fn benchmark_writer(c: &mut Criterion) {
                 let writer =
                     db_mover::sqlite::SqliteDB::new(output_db_path.to_str().unwrap()).unwrap();
 
-                writer.start_writing(reciver, "test");
+                writer.start_writing(reciver, "test").unwrap();
 
                 remove_file(&output_db_path).unwrap();
             },

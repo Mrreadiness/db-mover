@@ -1,3 +1,4 @@
+use anyhow::Context;
 use rusqlite::{params_from_iter, types::ValueRef, Connection, OpenFlags, ToSql};
 
 use crate::{
@@ -24,7 +25,7 @@ impl SqliteDB {
         return Ok(SqliteDB { connection: conn });
     }
 
-    fn write_batch(&self, batch: &[Row], table: &str) {
+    fn write_batch(&self, batch: &[Row], table: &str) -> anyhow::Result<()> {
         let placeholder = format!(
             "({})",
             batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
@@ -38,24 +39,28 @@ impl SqliteDB {
         let mut stmt = self
             .connection
             .prepare(&query)
-            .expect("Failed to create write query");
+            .context("Failed to create write query")?;
         stmt.execute(params_from_iter(batch.concat().iter()))
-            .expect("Failed to write data");
+            .context("Failed to write data")?;
+        return Ok(());
     }
 }
 
-impl From<ValueRef<'_>> for Value {
-    fn from(value: ValueRef<'_>) -> Self {
-        match value {
+impl TryFrom<ValueRef<'_>> for Value {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ValueRef<'_>) -> Result<Self, Self::Error> {
+        let parsed = match value {
             ValueRef::Null => Value::Null,
             ValueRef::Integer(val) => Value::I64(val),
             ValueRef::Real(val) => Value::F64(val),
             ValueRef::Text(val) => {
-                let val = std::str::from_utf8(val).expect("invalid UTF-8");
+                let val = std::str::from_utf8(val).context("invalid UTF-8")?;
                 Value::String(val.to_string())
             }
             ValueRef::Blob(val) => Value::Bytes(val.to_vec()),
-        }
+        };
+        return Ok(parsed);
     }
 }
 
@@ -72,37 +77,43 @@ impl ToSql for Value {
 }
 
 impl DBReader for SqliteDB {
-    fn start_reading(&mut self, sender: Sender, table: &str) {
+    fn start_reading(&mut self, sender: Sender, table: &str) -> anyhow::Result<()> {
         let query = format!("select * from {table}");
         let mut stmt = self
             .connection
             .prepare(&query)
-            .expect("Failed to create read query");
+            .context("Failed to create read query")?;
         let column_count = stmt.column_count();
-        let mut rows = stmt.query([]).expect("Failed to read rows");
+        let mut rows = stmt.query([]).context("Failed to read rows")?;
         while let Ok(Some(row)) = rows.next() {
             let mut result: Row = Vec::with_capacity(column_count);
             for idx in 0..column_count {
-                result.push(Value::from(row.get_ref_unwrap(idx)));
+                result.push(Value::try_from(
+                    row.get_ref(idx).context("Failed to read vaule")?,
+                )?);
             }
-            sender.send(result).expect("Failed to send data to queue");
+            sender
+                .send(result)
+                .context("Failed to send data to queue")?;
         }
+        return Ok(());
     }
 }
 
 impl DBWriter for SqliteDB {
-    fn start_writing(&self, reciever: Reciever, table: &str) {
+    fn start_writing(&self, reciever: Reciever, table: &str) -> anyhow::Result<()> {
         let batch_size = 100_000;
         let mut batch: Vec<Row> = Vec::with_capacity(batch_size);
         while let Ok(row) = reciever.recv() {
             batch.push(row);
             if batch.len() == batch_size {
-                self.write_batch(&batch, table);
+                self.write_batch(&batch, table)?;
                 batch.clear();
             }
         }
         if !batch.is_empty() {
-            self.write_batch(&batch, table);
+            self.write_batch(&batch, table)?;
         }
+        return Ok(());
     }
 }
