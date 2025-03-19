@@ -31,7 +31,9 @@ impl URI {
             URI::Sqlite(uri) => {
                 Box::new(SqliteDB::new(uri).context("Unable to connect to the sqlite")?)
             }
-            _ => panic!("FIXME"),
+            URI::Postgres(uri) => {
+                Box::new(PostgresDB::new(uri).context("Unable to connect to the postgres")?)
+            }
         };
         return Ok(writer);
     }

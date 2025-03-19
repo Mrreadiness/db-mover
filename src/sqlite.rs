@@ -101,7 +101,7 @@ impl DBReader for SqliteDB {
 }
 
 impl DBWriter for SqliteDB {
-    fn start_writing(&self, reciever: Reciever, table: &str) -> anyhow::Result<()> {
+    fn start_writing(&mut self, reciever: Reciever, table: &str) -> anyhow::Result<()> {
         let batch_size = 100_000;
         let mut batch: Vec<Row> = Vec::with_capacity(batch_size);
         while let Ok(row) = reciever.recv() {

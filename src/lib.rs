@@ -10,7 +10,7 @@ pub mod uri;
 pub mod writer;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
-    let writer = args.output.create_writer()?;
+    let mut writer = args.output.create_writer()?;
     for table in &args.table {
         let (sender, reciever) = channel::create_channel(args.queue_size);
         let reader_handle = std::thread::spawn({

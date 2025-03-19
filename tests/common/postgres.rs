@@ -1,7 +1,7 @@
 use fake::{Fake, Faker};
 use postgres::{Client, NoTls};
 
-use super::{gen_database_name, row::TestRow};
+use super::{gen_database_name, row::TestRow, testable_database::TestableDatabase};
 
 pub struct TestPostresDatabase {
     name: String,
@@ -39,8 +39,14 @@ impl TestPostresDatabase {
             base_client,
         };
     }
+}
 
-    pub fn create_test_table(&mut self, name: &str) {
+impl TestableDatabase for TestPostresDatabase {
+    fn get_uri(&self) -> db_mover::uri::URI {
+        return db_mover::uri::URI::Postgres(self.uri.clone());
+    }
+
+    fn create_test_table(&mut self, name: &str) {
         let query = format!(
         "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real DOUBLE PRECISION, text TEXT, blob BYTEA)"
         );
@@ -49,7 +55,7 @@ impl TestPostresDatabase {
             .expect("Failed to create table");
     }
 
-    pub fn fill_test_table(&mut self, name: &str, num_rows: usize) {
+    fn fill_test_table(&mut self, name: &str, num_rows: usize) {
         let query = format!("INSERT INTO {name} VALUES ($1, $2, $3, $4)");
         let stmt = self.client.prepare(&query).unwrap();
 
@@ -61,7 +67,7 @@ impl TestPostresDatabase {
         }
     }
 
-    pub fn get_all_rows(&mut self, table_name: &str) -> Vec<TestRow> {
+    fn get_all_rows(&mut self, table_name: &str) -> Vec<TestRow> {
         let query = format!("SELECT * FROM {table_name} ORDER BY id");
 
         let stmt = self.client.prepare(&query).unwrap();

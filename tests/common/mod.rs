@@ -2,6 +2,8 @@
 pub mod postgres;
 pub mod row;
 pub mod sqlite;
+pub mod testable_database;
+pub mod testcases;
 
 use rand::distr::{slice::Choose, Distribution};
 

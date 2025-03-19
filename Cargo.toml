@@ -14,6 +14,8 @@ crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
 rusqlite = { version = "0.32.1", features = ["column_decltype"] }
 gen-bench-data = { version = "0.1.0", path = "./gen-bench-data"}
 postgres = "0.19.9"
+itoa = "1.0.15"
+ryu = "1.0.20"
 
 [dev-dependencies]
 criterion = "0.5.1"

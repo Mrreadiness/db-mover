@@ -1,9 +1,13 @@
+use std::io::Write;
+
 use anyhow::Context;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::types::Type;
 use postgres::{Client, NoTls};
 
+use crate::channel::Reciever;
 use crate::row::{Row, Value};
+use crate::writer::DBWriter;
 use crate::{channel::Sender, reader::DBReader};
 
 pub struct PostgresDB {
@@ -57,6 +61,37 @@ impl DBReader for PostgresDB {
                 .send(result)
                 .context("Failed to send data to queue")?;
         }
+        return Ok(());
+    }
+}
+
+impl DBWriter for PostgresDB {
+    fn start_writing(&mut self, reciever: Reciever, table: &str) -> anyhow::Result<()> {
+        let query = format!("COPY {table} FROM STDIN");
+        let mut writer = self
+            .client
+            .copy_in(&query)
+            .context("Failed to star writing data into postgres")?;
+        let mut itoa_buffer = itoa::Buffer::new();
+        let mut ryu_buffer = ryu::Buffer::new();
+        while let Ok(row) = reciever.recv() {
+            let mut serialized_row: Vec<u8> = Vec::with_capacity(row.len() * 8);
+            for value in row {
+                match value {
+                    Value::String(string) => serialized_row.extend(string.into_bytes()),
+                    Value::Bytes(bytes) => serialized_row.extend(bytes),
+                    Value::I64(num) => serialized_row.extend(itoa_buffer.format(num).as_bytes()),
+                    Value::F64(num) => serialized_row.extend(ryu_buffer.format(num).as_bytes()),
+                    Value::Null => serialized_row.extend_from_slice(b"\\N"),
+                };
+                serialized_row.push(b'\t');
+            }
+            serialized_row.pop();
+            serialized_row.push(b'\n');
+
+            writer.write_all(&serialized_row)?;
+        }
+        writer.finish()?;
         return Ok(());
     }
 }

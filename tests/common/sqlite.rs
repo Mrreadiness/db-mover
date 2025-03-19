@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
+use db_mover::uri::URI;
 use fake::{Fake, Faker};
 use rusqlite::{params, Connection, OpenFlags};
 use tempfile::TempDir;
 
-use super::{gen_database_name, row::TestRow};
+use super::{gen_database_name, row::TestRow, testable_database::TestableDatabase};
 
 pub struct TestSqliteDatabase {
     pub path: PathBuf,
@@ -30,15 +31,21 @@ impl TestSqliteDatabase {
             tmp_dir,
         };
     }
+}
 
-    pub fn create_test_sqlite(&self, table_name: &str) {
+impl TestableDatabase for TestSqliteDatabase {
+    fn get_uri(&self) -> URI {
+        return URI::Sqlite(format!("sqlite://{}", self.path.to_str().unwrap()));
+    }
+
+    fn create_test_table(&mut self, table_name: &str) {
         let query = format!(
             "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY, real REAL, text TEXT, blob BLOB)"
         );
         self.conn.execute(&query, []).unwrap();
     }
 
-    pub fn fill_test_table(&self, table_name: &str, num_rows: usize) {
+    fn fill_test_table(&mut self, table_name: &str, num_rows: usize) {
         let query = format!("INSERT INTO {table_name} VALUES (?1, ?2, ?3, ?4)");
         let mut stmt = self.conn.prepare(&query).unwrap();
 
@@ -48,7 +55,7 @@ impl TestSqliteDatabase {
         }
     }
 
-    pub fn get_all_rows(&self, table_name: &str) -> Vec<TestRow> {
+    fn get_all_rows(&mut self, table_name: &str) -> Vec<TestRow> {
         let query = format!("SELECT * FROM {table_name} ORDER BY id");
 
         let mut stmt = self.conn.prepare(&query).unwrap();
