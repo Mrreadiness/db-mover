@@ -11,7 +11,7 @@ members = ["gen-bench-data"]
 anyhow = "1.0.95"
 clap = { version = "4.5.23", features = ["derive"] }
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
-rusqlite = { version = "0.32.1", features = ["column_decltype"] }
+rusqlite = { version = "0.32.1", features = ["column_decltype", "bundled"] }
 gen-bench-data = { version = "0.1.0", path = "./gen-bench-data"}
 postgres = "0.19.9"
 
