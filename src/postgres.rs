@@ -65,33 +65,54 @@ impl DBReader for PostgresDB {
     }
 }
 
+// Binary COPY signature (first 15 bytes)
+const BINARY_SIGNATURE: &[u8] = b"PGCOPY\n\xFF\r\n\0";
+
 impl DBWriter for PostgresDB {
     fn start_writing(&mut self, reciever: Reciever, table: &str) -> anyhow::Result<()> {
-        let query = format!("COPY {table} FROM STDIN");
+        let query = format!("COPY {table} FROM STDIN WITH BINARY");
         let mut writer = self
             .client
             .copy_in(&query)
             .context("Failed to star writing data into postgres")?;
-        let mut itoa_buffer = itoa::Buffer::new();
-        let mut ryu_buffer = ryu::Buffer::new();
+
+        writer.write_all(BINARY_SIGNATURE)?;
+
+        // Flags (4 bytes).
+        writer.write_all(&0_i32.to_be_bytes())?;
+
+        // Header extension length (4 bytes)
+        writer.write_all(&0_i32.to_be_bytes())?;
+
         while let Ok(row) = reciever.recv() {
-            let mut serialized_row: Vec<u8> = Vec::with_capacity(row.len() * 8);
+            // Num of fields
+            writer.write_all(&(row.len() as i16).to_be_bytes())?;
             for value in row {
                 match value {
-                    Value::String(string) => serialized_row.extend(string.into_bytes()),
-                    Value::Bytes(bytes) => serialized_row.extend(bytes),
-                    Value::I64(num) => serialized_row.extend(itoa_buffer.format(num).as_bytes()),
-                    Value::F64(num) => serialized_row.extend(ryu_buffer.format(num).as_bytes()),
-                    Value::Null => serialized_row.extend_from_slice(b"\\N"),
+                    Value::String(string) => {
+                        let bytes = string.into_bytes();
+                        writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
+                        writer.write_all(&bytes)?;
+                    }
+                    Value::Bytes(bytes) => {
+                        writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
+                        writer.write_all(&bytes)?;
+                    }
+                    Value::I64(num) => {
+                        writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
+                        writer.write_all(&num.to_be_bytes())?;
+                    }
+                    Value::F64(num) => {
+                        writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
+                        writer.write_all(&num.to_be_bytes())?;
+                    }
+                    Value::Null => writer.write_all(&(-1_i32).to_be_bytes())?,
                 };
-                serialized_row.push(b'\t');
             }
-            serialized_row.pop();
-            serialized_row.push(b'\n');
-
-            writer.write_all(&serialized_row)?;
         }
-        writer.finish()?;
+        writer
+            .finish()
+            .context("Failed to finish writing to postgres")?;
         return Ok(());
     }
 }

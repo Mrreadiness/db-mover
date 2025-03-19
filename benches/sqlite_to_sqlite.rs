@@ -92,7 +92,7 @@ fn benchmark_writer(c: &mut Criterion) {
             },
             |reciver| {
                 create_sqlite_db(&output_db_path).unwrap();
-                let writer =
+                let mut writer =
                     db_mover::sqlite::SqliteDB::new(output_db_path.to_str().unwrap()).unwrap();
 
                 writer.start_writing(reciver, "test").unwrap();

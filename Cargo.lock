@@ -382,11 +382,9 @@ dependencies = [
  "crossbeam",
  "fake",
  "gen-bench-data",
- "itoa",
  "postgres",
  "rand 0.9.0",
  "rusqlite",
- "ryu",
  "tempfile",
 ]
 
