@@ -37,7 +37,13 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
         });
         writer_progress.set_message(format!("Writing table {table}"));
         writer
-            .start_writing(reciever, table, writer_progress)
+            .start_writing(
+                reciever,
+                table,
+                args.batch_write_size,
+                args.batch_write_retries,
+                writer_progress,
+            )
             .context("Writer failed")?;
         let reader_result = reader_handle.join().expect("Reader panicked");
         reader_result.context("Reader failed")?;

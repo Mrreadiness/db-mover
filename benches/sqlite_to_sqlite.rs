@@ -101,7 +101,7 @@ fn benchmark_writer(c: &mut Criterion) {
                     db_mover::sqlite::SqliteDB::new(output_db_path.to_str().unwrap()).unwrap();
 
                 writer
-                    .start_writing(reciver, "test", ProgressBar::hidden())
+                    .start_writing(reciver, "test", 100_000, 0, ProgressBar::hidden())
                     .unwrap();
 
                 remove_file(&output_db_path).unwrap();

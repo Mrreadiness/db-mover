@@ -20,4 +20,12 @@ pub struct Args {
     /// Size of queue between reader and writers
     #[arg(long, short)]
     pub queue_size: Option<usize>,
+
+    /// Size of batches used by writer
+    #[arg(long, default_value_t = 100_000)]
+    pub batch_write_size: usize,
+
+    /// Number of retries to write a batch
+    #[arg(long, default_value_t = 3)]
+    pub batch_write_retries: usize,
 }
