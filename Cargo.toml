@@ -4,15 +4,11 @@ description = "Tool to move data between databases"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
-members = ["gen-bench-data"]
-
 [dependencies]
 anyhow = "1.0.95"
 clap = { version = "4.5.23", features = ["derive"] }
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
 rusqlite = { version = "0.32.1", features = ["column_decltype", "bundled", "time"] }
-gen-bench-data = { version = "0.1.0", path = "./gen-bench-data"}
 postgres = "0.19.9"
 indicatif = "0.17.11"
 console = "0.15.11"

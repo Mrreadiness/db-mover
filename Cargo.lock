@@ -404,7 +404,6 @@ dependencies = [
  "criterion",
  "crossbeam",
  "fake",
- "gen-bench-data",
  "indicatif",
  "postgres",
  "rand 0.9.0",
@@ -546,15 +545,6 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
-]
-
-[[package]]
-name = "gen-bench-data"
-version = "0.1.0"
-dependencies = [
- "clap",
- "fake",
- "rusqlite",
 ]
 
 [[package]]

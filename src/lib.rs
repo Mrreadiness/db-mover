@@ -7,9 +7,6 @@ pub mod databases;
 pub mod progress;
 pub mod uri;
 
-#[cfg(test)]
-mod test_utils;
-
 pub fn run(args: args::Args) -> anyhow::Result<()> {
     console::set_colors_enabled(false);
     let mut writer = args.output.create_writer()?;

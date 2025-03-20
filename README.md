@@ -20,16 +20,9 @@ POSTGRES_URI="postgres://username@localhost/postgres" cargo test
 
 `POSTGRES_URI` - URI for database, which will be used in tests. However, for each test run new database will be created and dropped. 
 
-### Benchmark's
-
-Generate data for benchmarks:
+Run benchmarks:
 ```bash
-cargo run -p gen-bench-data -- --help
-```
-
-Run benchmark:
-```bash
-cargo bench
+POSTGRES_URI="postgres://username@localhost/postgres" cargo bench
 ```
 
 ### Pre-commit hooks
