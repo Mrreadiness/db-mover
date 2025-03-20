@@ -3,10 +3,9 @@ use indicatif::ProgressBar;
 use rusqlite::{params_from_iter, types::ValueRef, Connection, OpenFlags, ToSql};
 
 use crate::{
-    channel::{Reciever, Sender},
+    channel::Sender,
     reader::DBReader,
-    row::Row,
-    row::Value,
+    row::{Row, Value},
     writer::DBWriter,
 };
 
@@ -24,26 +23,6 @@ impl SqliteDB {
                 | OpenFlags::SQLITE_OPEN_URI,
         )?;
         return Ok(SqliteDB { connection: conn });
-    }
-
-    fn write_batch(&self, batch: &[Row], table: &str) -> anyhow::Result<()> {
-        let placeholder = format!(
-            "({})",
-            batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-        );
-        let placeholders = batch
-            .iter()
-            .map(|_| placeholder.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let query = format!("insert into {table} values {placeholders}");
-        let mut stmt = self
-            .connection
-            .prepare(&query)
-            .context("Failed to create write query")?;
-        stmt.execute(params_from_iter(batch.concat().iter()))
-            .context("Failed to write data")?;
-        return Ok(());
     }
 }
 
@@ -114,27 +93,23 @@ impl DBReader for SqliteDB {
 }
 
 impl DBWriter for SqliteDB {
-    fn start_writing(
-        &mut self,
-        reciever: Reciever,
-        table: &str,
-        progress: ProgressBar,
-    ) -> anyhow::Result<()> {
-        let batch_size = 1_000;
-        let mut batch: Vec<Row> = Vec::with_capacity(batch_size);
-        while let Ok(row) = reciever.recv() {
-            batch.push(row);
-            if batch.len() == batch_size {
-                self.write_batch(&batch, table)?;
-                progress.inc(batch.len().try_into()?);
-                batch.clear();
-            }
-        }
-        if !batch.is_empty() {
-            self.write_batch(&batch, table)?;
-            progress.inc(batch.len().try_into()?);
-        }
-        progress.finish();
+    fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
+        let placeholder = format!(
+            "({})",
+            batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+        );
+        let placeholders = batch
+            .iter()
+            .map(|_| placeholder.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let query = format!("insert into {table} values {placeholders}");
+        let mut stmt = self
+            .connection
+            .prepare(&query)
+            .context("Failed to create write query")?;
+        stmt.execute(params_from_iter(batch.concat().iter()))
+            .context("Failed to write data")?;
         return Ok(());
     }
 }

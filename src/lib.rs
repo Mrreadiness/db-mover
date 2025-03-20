@@ -1,9 +1,10 @@
 use anyhow::Context;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::MultiProgress;
 
 pub mod args;
 pub mod channel;
 pub mod postgres;
+pub mod progress;
 pub mod reader;
 pub mod row;
 pub mod sqlite;
@@ -11,25 +12,17 @@ pub mod uri;
 pub mod writer;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
+    console::set_colors_enabled(false);
     let mut writer = args.output.create_writer()?;
     for table in &args.table {
         let (sender, reciever) = channel::create_channel(args.queue_size);
         let multi_bars = MultiProgress::new();
-        let reader_progress = ProgressBar::no_length().with_style(
-            ProgressStyle::with_template(
-                "{msg} [{elapsed_precise}] {bar:40} {percent}% {human_pos}/{human_len} Rows per sec: {per_sec} ETA: {eta}",
-            )
-            .unwrap(),
-        );
-        let writer_progress = ProgressBar::no_length().with_style(
-            ProgressStyle::with_template(
-                "{msg} [{elapsed_precise}] {bar:40} {percent}% {human_pos}/{human_len} Rows per sec: {per_sec} ETA: {eta}",
-            )
-            .unwrap(),
-        );
+        let reader_progress = progress::get_progress_bar();
+        let writer_progress = progress::get_progress_bar();
 
         multi_bars.add(reader_progress.clone());
         multi_bars.add(writer_progress.clone());
+        reader_progress.position();
         let reader_handle = std::thread::spawn({
             let args = args.clone();
             let table = table.clone();

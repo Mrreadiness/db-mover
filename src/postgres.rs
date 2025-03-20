@@ -6,7 +6,6 @@ use postgres::fallible_iterator::FallibleIterator;
 use postgres::types::Type;
 use postgres::{Client, NoTls};
 
-use crate::channel::Reciever;
 use crate::row::{Row, Value};
 use crate::writer::DBWriter;
 use crate::{channel::Sender, reader::DBReader};
@@ -81,48 +80,53 @@ impl DBReader for PostgresDB {
 
 impl Value {
     fn write_postgres_bytes(
-        self,
+        &self,
         column_type: &Type,
         writer: &mut impl Write,
     ) -> anyhow::Result<()> {
-        if self == Value::Null {
+        if self == &Value::Null {
             writer.write_all(&(-1_i32).to_be_bytes())?;
             return Ok(());
         }
         match (column_type, self) {
-            (&Type::INT8, Value::I64(num)) => {
+            (&Type::INT8, &Value::I64(num)) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::INT4, Value::I64(num)) => {
+            (&Type::INT4, &Value::I64(num)) => {
                 let num = i32::try_from(num)?;
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::INT2, Value::I64(num)) => {
+            (&Type::INT2, &Value::I64(num)) => {
                 let num = i16::try_from(num)?;
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::FLOAT8, Value::F64(num)) => {
+            (&Type::FLOAT8, &Value::F64(num)) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::FLOAT4, Value::F64(num)) => {
+            (&Type::FLOAT4, &Value::F64(num)) => {
                 let num = num as f32;
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
             (&Type::BYTEA, Value::Bytes(bytes)) => {
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
-                writer.write_all(&bytes)?;
+                writer.write_all(bytes)?;
             }
             (&Type::VARCHAR, Value::String(string))
             | (&Type::TEXT, Value::String(string))
             | (&Type::BPCHAR, Value::String(string)) => {
-                let bytes = string.into_bytes();
+                let bytes = string.clone().into_bytes();
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
                 writer.write_all(&bytes)?;
+            }
+            (&Type::TIME, &Value::I64(num)) => {
+                let num = i16::try_from(num)?;
+                writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
+                writer.write_all(&num.to_be_bytes())?;
             }
             _ => return Err(anyhow::anyhow!("Unsuppoerted type conversion")),
         };
@@ -134,12 +138,7 @@ impl Value {
 const BINARY_SIGNATURE: &[u8] = b"PGCOPY\n\xFF\r\n\0";
 
 impl DBWriter for PostgresDB {
-    fn start_writing(
-        &mut self,
-        reciever: Reciever,
-        table: &str,
-        progress: ProgressBar,
-    ) -> anyhow::Result<()> {
+    fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
         let query = format!("select * from {table}");
         let stmt = self
             .client
@@ -161,18 +160,16 @@ impl DBWriter for PostgresDB {
         // Header extension length (4 bytes)
         writer.write_all(&0_i32.to_be_bytes())?;
 
-        while let Ok(row) = reciever.recv() {
+        for row in batch {
             // Num of fields
             writer.write_all(&(row.len() as i16).to_be_bytes())?;
             for (value, column) in std::iter::zip(row, columns) {
                 value.write_postgres_bytes(column.type_(), &mut writer)?;
             }
-            progress.inc(1);
         }
         writer
             .finish()
             .context("Failed to finish writing to postgres")?;
-        progress.finish();
         return Ok(());
     }
 }
