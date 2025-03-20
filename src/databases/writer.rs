@@ -17,6 +17,7 @@ pub trait DBWriter: Send {
                 if left_reties - 1 == 0 {
                     return Err(err);
                 }
+                println!("Got error: {err:?}. Retries left: {left_reties}");
                 return self.write_batch_with_retry(batch, table, left_reties - 1);
             }
         }
