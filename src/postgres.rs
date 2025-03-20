@@ -1,6 +1,7 @@
 use std::io::Write;
 
 use anyhow::Context;
+use indicatif::ProgressBar;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::types::Type;
 use postgres::{Client, NoTls};
@@ -22,7 +23,18 @@ impl PostgresDB {
 }
 
 impl DBReader for PostgresDB {
-    fn start_reading(&mut self, sender: Sender, table: &str) -> anyhow::Result<()> {
+    fn get_count(&mut self, table: &str) -> anyhow::Result<u32> {
+        let query = format!("select count(1) from {table}");
+        let size: i64 = self.client.query_one(&query, &[])?.get(0);
+        return Ok(size.try_into()?);
+    }
+
+    fn start_reading(
+        &mut self,
+        sender: Sender,
+        table: &str,
+        progress: ProgressBar,
+    ) -> anyhow::Result<()> {
         let query = format!("select * from {table}");
         let stmt = self
             .client
@@ -60,7 +72,9 @@ impl DBReader for PostgresDB {
             sender
                 .send(result)
                 .context("Failed to send data to queue")?;
+            progress.inc(1);
         }
+        progress.finish();
         return Ok(());
     }
 }
@@ -120,7 +134,12 @@ impl Value {
 const BINARY_SIGNATURE: &[u8] = b"PGCOPY\n\xFF\r\n\0";
 
 impl DBWriter for PostgresDB {
-    fn start_writing(&mut self, reciever: Reciever, table: &str) -> anyhow::Result<()> {
+    fn start_writing(
+        &mut self,
+        reciever: Reciever,
+        table: &str,
+        progress: ProgressBar,
+    ) -> anyhow::Result<()> {
         let query = format!("select * from {table}");
         let stmt = self
             .client
@@ -148,10 +167,12 @@ impl DBWriter for PostgresDB {
             for (value, column) in std::iter::zip(row, columns) {
                 value.write_postgres_bytes(column.type_(), &mut writer)?;
             }
+            progress.inc(1);
         }
         writer
             .finish()
             .context("Failed to finish writing to postgres")?;
+        progress.finish();
         return Ok(());
     }
 }

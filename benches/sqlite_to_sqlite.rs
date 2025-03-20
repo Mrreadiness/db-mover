@@ -1,6 +1,7 @@
 use db_mover::{self, reader::DBReader, writer::DBWriter};
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use indicatif::ProgressBar;
 use rusqlite::{Connection, OpenFlags};
 use std::{
     fs::remove_file,
@@ -61,7 +62,9 @@ fn benchmark_reader(c: &mut Criterion) {
             let (sender, _reciver) = db_mover::channel::create_channel(None);
             let mut reader =
                 db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
-            reader.start_reading(sender, "test").unwrap();
+            reader
+                .start_reading(sender, "test", ProgressBar::hidden())
+                .unwrap();
         })
     });
 }
@@ -75,7 +78,9 @@ fn benchmark_writer(c: &mut Criterion) {
         let input_db_path = PathBuf::from("benches/data/input.db");
         let (sender, reciver) = db_mover::channel::create_channel(None);
         let mut reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
-        reader.start_reading(sender, "test").unwrap();
+        reader
+            .start_reading(sender, "test", ProgressBar::hidden())
+            .unwrap();
         for row in reciver.iter() {
             data.push(row);
         }
@@ -95,7 +100,9 @@ fn benchmark_writer(c: &mut Criterion) {
                 let mut writer =
                     db_mover::sqlite::SqliteDB::new(output_db_path.to_str().unwrap()).unwrap();
 
-                writer.start_writing(reciver, "test").unwrap();
+                writer
+                    .start_writing(reciver, "test", ProgressBar::hidden())
+                    .unwrap();
 
                 remove_file(&output_db_path).unwrap();
             },

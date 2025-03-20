@@ -43,8 +43,8 @@ fn fill_table(conn: &Connection, table_name: &str, num_rows: usize) {
     let query = format!("INSERT INTO {table_name} VALUES (?1, ?2, ?3, ?4)");
     let mut stmt = conn.prepare(&query).unwrap();
 
+    let data = Faker.fake::<(f64, String, Vec<u8>)>();
     for i in 1..num_rows + 1 {
-        let data = Faker.fake::<(f64, String, Vec<u8>)>();
         stmt.execute(params![i, data.0, data.1, data.2]).unwrap();
     }
 }

@@ -1,4 +1,5 @@
 use anyhow::Context;
+use indicatif::ProgressBar;
 use rusqlite::{params_from_iter, types::ValueRef, Connection, OpenFlags, ToSql};
 
 use crate::{
@@ -77,7 +78,17 @@ impl ToSql for Value {
 }
 
 impl DBReader for SqliteDB {
-    fn start_reading(&mut self, sender: Sender, table: &str) -> anyhow::Result<()> {
+    fn get_count(&mut self, table: &str) -> anyhow::Result<u32> {
+        let query = format!("select count(1) from {table}");
+        return Ok(self.connection.query_row(&query, [], |row| row.get(0))?);
+    }
+
+    fn start_reading(
+        &mut self,
+        sender: Sender,
+        table: &str,
+        progress: ProgressBar,
+    ) -> anyhow::Result<()> {
         let query = format!("select * from {table}");
         let mut stmt = self
             .connection
@@ -95,25 +106,35 @@ impl DBReader for SqliteDB {
             sender
                 .send(result)
                 .context("Failed to send data to queue")?;
+            progress.inc(1);
         }
+        progress.finish();
         return Ok(());
     }
 }
 
 impl DBWriter for SqliteDB {
-    fn start_writing(&mut self, reciever: Reciever, table: &str) -> anyhow::Result<()> {
-        let batch_size = 100_000;
+    fn start_writing(
+        &mut self,
+        reciever: Reciever,
+        table: &str,
+        progress: ProgressBar,
+    ) -> anyhow::Result<()> {
+        let batch_size = 1_000;
         let mut batch: Vec<Row> = Vec::with_capacity(batch_size);
         while let Ok(row) = reciever.recv() {
             batch.push(row);
             if batch.len() == batch_size {
                 self.write_batch(&batch, table)?;
+                progress.inc(batch.len().try_into()?);
                 batch.clear();
             }
         }
         if !batch.is_empty() {
             self.write_batch(&batch, table)?;
+            progress.inc(batch.len().try_into()?);
         }
+        progress.finish();
         return Ok(());
     }
 }
