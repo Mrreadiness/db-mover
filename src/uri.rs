@@ -2,10 +2,10 @@ use std::str::FromStr;
 
 use anyhow::Context;
 
-use crate::postgres::PostgresDB;
-use crate::reader::DBReader;
-use crate::sqlite::SqliteDB;
-use crate::writer::DBWriter;
+use crate::databases::postgres::PostgresDB;
+use crate::databases::reader::DBReader;
+use crate::databases::sqlite::SqliteDB;
+use crate::databases::writer::DBWriter;
 
 #[derive(Debug, Clone)]
 pub enum URI {

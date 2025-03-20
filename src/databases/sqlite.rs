@@ -4,9 +4,9 @@ use rusqlite::{params_from_iter, types::ValueRef, Connection, OpenFlags, ToSql};
 
 use crate::{
     channel::Sender,
-    reader::DBReader,
-    row::{Row, Value},
-    writer::DBWriter,
+    databases::reader::DBReader,
+    databases::row::{Row, Value},
+    databases::writer::DBWriter,
 };
 
 pub struct SqliteDB {

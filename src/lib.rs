@@ -3,13 +3,12 @@ use indicatif::MultiProgress;
 
 pub mod args;
 pub mod channel;
-pub mod postgres;
+pub mod databases;
 pub mod progress;
-pub mod reader;
-pub mod row;
-pub mod sqlite;
 pub mod uri;
-pub mod writer;
+
+#[cfg(test)]
+mod test_utils;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
     console::set_colors_enabled(false);

@@ -17,6 +17,8 @@ pub fn empty(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase
         output: out_db.get_uri(),
         table: vec![],
         queue_size: Some(100_000),
+        batch_write_size: 10_000,
+        batch_write_retries: 1,
     };
     db_mover::run(args).unwrap();
 
@@ -28,6 +30,8 @@ pub fn empty(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase
         output: out_db.get_uri(),
         table: vec!["test".to_owned()],
         queue_size: Some(100_000),
+        batch_write_size: 10_000,
+        batch_write_retries: 1,
     };
     db_mover::run(args).unwrap();
 
@@ -46,6 +50,8 @@ pub fn one_table(mut in_db: impl TestableDatabase, mut out_db: impl TestableData
         output: out_db.get_uri(),
         table: vec!["test".to_owned()],
         queue_size: Some(100_000),
+        batch_write_size: 10_000,
+        batch_write_retries: 1,
     };
     db_mover::run(args).unwrap();
 
@@ -65,6 +71,8 @@ pub fn multiple_tables(mut in_db: impl TestableDatabase, mut out_db: impl Testab
         output: out_db.get_uri(),
         table: vec!["test".to_owned(), "test1".to_owned()],
         queue_size: Some(100_000),
+        batch_write_size: 10_000,
+        batch_write_retries: 1,
     };
     db_mover::run(args).unwrap();
 

@@ -6,9 +6,10 @@ use postgres::fallible_iterator::FallibleIterator;
 use postgres::types::Type;
 use postgres::{Client, NoTls};
 
-use crate::row::{Row, Value};
-use crate::writer::DBWriter;
-use crate::{channel::Sender, reader::DBReader};
+use crate::channel::Sender;
+use crate::databases::reader::DBReader;
+use crate::databases::row::{Row, Value};
+use crate::databases::writer::DBWriter;
 
 pub struct PostgresDB {
     client: Client,

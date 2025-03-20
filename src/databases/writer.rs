@@ -1,6 +1,6 @@
 use indicatif::ProgressBar;
 
-use crate::{channel::Reciever, progress::log_progress_bar_if_no_term, row::Row};
+use crate::{channel::Reciever, databases::row::Row, progress::log_progress_bar_if_no_term};
 
 pub trait DBWriter: Send {
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;

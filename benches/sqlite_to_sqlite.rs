@@ -1,4 +1,6 @@
-use db_mover::{self, reader::DBReader, writer::DBWriter};
+use db_mover;
+use db_mover::databases::reader::DBReader;
+use db_mover::databases::writer::DBWriter;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use indicatif::ProgressBar;
@@ -41,6 +43,8 @@ fn benchmark(c: &mut Criterion) {
         )),
         table: vec!["test".to_owned()],
         queue_size: Some(10_000),
+        batch_write_size: 1_000,
+        batch_write_retries: 1,
     };
 
     c.bench_function("sqlite to sqlite", |b| {
@@ -61,7 +65,8 @@ fn benchmark_reader(c: &mut Criterion) {
         b.iter(|| {
             let (sender, _reciver) = db_mover::channel::create_channel(None);
             let mut reader =
-                db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
+                db_mover::databases::sqlite::SqliteDB::new(input_db_path.to_str().unwrap())
+                    .unwrap();
             reader
                 .start_reading(sender, "test", ProgressBar::hidden())
                 .unwrap();
@@ -77,7 +82,8 @@ fn benchmark_writer(c: &mut Criterion) {
     {
         let input_db_path = PathBuf::from("benches/data/input.db");
         let (sender, reciver) = db_mover::channel::create_channel(None);
-        let mut reader = db_mover::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
+        let mut reader =
+            db_mover::databases::sqlite::SqliteDB::new(input_db_path.to_str().unwrap()).unwrap();
         reader
             .start_reading(sender, "test", ProgressBar::hidden())
             .unwrap();
@@ -98,7 +104,8 @@ fn benchmark_writer(c: &mut Criterion) {
             |reciver| {
                 create_sqlite_db(&output_db_path).unwrap();
                 let mut writer =
-                    db_mover::sqlite::SqliteDB::new(output_db_path.to_str().unwrap()).unwrap();
+                    db_mover::databases::sqlite::SqliteDB::new(output_db_path.to_str().unwrap())
+                        .unwrap();
 
                 writer
                     .start_writing(reciver, "test", 100_000, 0, ProgressBar::hidden())

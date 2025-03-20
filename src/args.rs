@@ -22,7 +22,7 @@ pub struct Args {
     pub queue_size: Option<usize>,
 
     /// Size of batches used by writer
-    #[arg(long, default_value_t = 100_000)]
+    #[arg(long, default_value_t = 1_000)]
     pub batch_write_size: usize,
 
     /// Number of retries to write a batch
