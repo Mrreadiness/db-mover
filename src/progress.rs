@@ -1,7 +1,8 @@
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use tracing::info;
 
 pub fn get_progress_bar() -> ProgressBar {
-    return ProgressBar::with_draw_target(None, ProgressDrawTarget::stdout()).with_style(
+    return ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr()).with_style(
             ProgressStyle::with_template(
                 "{msg} [{elapsed_precise}] {bar:40} {percent}% {human_pos}/{human_len} Rows per sec: {per_sec} ETA: {eta}",
             )
@@ -24,7 +25,5 @@ pub fn log_progress_bar_if_no_term(bar: &ProgressBar) {
     }
     let length = length.unwrap();
     let percent = position * 100 / length;
-    println!(
-        "{msg} [{elapsed:?}] {percent}% {position}/{length} Rows per sec: {per_sec} ETA: {eta:?}"
-    )
+    info!("{msg} [{elapsed:?}] {percent}% {position}/{length} Rows per sec: {per_sec} ETA: {eta:?}")
 }

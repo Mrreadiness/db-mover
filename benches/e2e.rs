@@ -18,15 +18,8 @@ fn sqlite_to_sqlite(c: &mut Criterion) {
         b.iter(|| {
             let mut output = common::sqlite::TestSqliteDatabase::new();
             output.create_test_table("test");
-            let args = db_mover::args::Args {
-                input: input.get_uri(),
-                output: output.get_uri(),
-                table: vec!["test".to_owned()],
-                queue_size: Some(10_000),
-                batch_write_size: 1_000,
-                batch_write_retries: 1,
-            };
-
+            let mut args = db_mover::args::Args::new(input.get_uri(), output.get_uri());
+            args.table.push("test".to_string());
             db_mover::run(args.clone()).unwrap();
         })
     });
@@ -41,14 +34,8 @@ fn sqlite_to_postgres(c: &mut Criterion) {
         b.iter(|| {
             let mut output = common::postgres::TestPostresDatabase::new();
             output.create_test_table("test");
-            let args = db_mover::args::Args {
-                input: input.get_uri(),
-                output: output.get_uri(),
-                table: vec!["test".to_owned()],
-                queue_size: Some(10_000),
-                batch_write_size: 1_000,
-                batch_write_retries: 1,
-            };
+            let mut args = db_mover::args::Args::new(input.get_uri(), output.get_uri());
+            args.table.push("test".to_string());
 
             db_mover::run(args.clone()).unwrap();
         })
@@ -64,14 +51,8 @@ fn postgres_to_sqlite(c: &mut Criterion) {
         b.iter(|| {
             let mut output = common::sqlite::TestSqliteDatabase::new();
             output.create_test_table("test");
-            let args = db_mover::args::Args {
-                input: input.get_uri(),
-                output: output.get_uri(),
-                table: vec!["test".to_owned()],
-                queue_size: Some(10_000),
-                batch_write_size: 1_000,
-                batch_write_retries: 1,
-            };
+            let mut args = db_mover::args::Args::new(input.get_uri(), output.get_uri());
+            args.table.push("test".to_string());
 
             db_mover::run(args.clone()).unwrap();
         })
@@ -87,14 +68,8 @@ fn postgres_to_postgres(c: &mut Criterion) {
         b.iter(|| {
             let mut output = common::postgres::TestPostresDatabase::new();
             output.create_test_table("test");
-            let args = db_mover::args::Args {
-                input: input.get_uri(),
-                output: output.get_uri(),
-                table: vec!["test".to_owned()],
-                queue_size: Some(10_000),
-                batch_write_size: 1_000,
-                batch_write_retries: 1,
-            };
+            let mut args = db_mover::args::Args::new(input.get_uri(), output.get_uri());
+            args.table.push("test".to_string());
 
             db_mover::run(args.clone()).unwrap();
         })

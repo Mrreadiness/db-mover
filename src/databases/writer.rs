@@ -1,4 +1,5 @@
 use indicatif::ProgressBar;
+use tracing::error;
 
 use crate::{channel::Reciever, databases::row::Row, progress::log_progress_bar_if_no_term};
 
@@ -17,7 +18,7 @@ pub trait DBWriter: Send {
                 if left_reties - 1 == 0 {
                     return Err(err);
                 }
-                println!("Got error: {err:?}. Retries left: {left_reties}");
+                error!("Got error: {err:?}. Retries left: {left_reties}");
                 return self.write_batch_with_retry(batch, table, left_reties - 1);
             }
         }

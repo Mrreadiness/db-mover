@@ -8,7 +8,6 @@ pub mod progress;
 pub mod uri;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
-    console::set_colors_enabled(false);
     let mut writer = args.output.create_writer()?;
     for table in &args.table {
         let (sender, reciever) = channel::create_channel(args.queue_size);
@@ -18,6 +17,9 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
 
         multi_bars.add(reader_progress.clone());
         multi_bars.add(writer_progress.clone());
+        if args.quiet {
+            multi_bars.set_draw_target(indicatif::ProgressDrawTarget::hidden());
+        }
         reader_progress.position();
         let reader_handle = std::thread::spawn({
             let args = args.clone();

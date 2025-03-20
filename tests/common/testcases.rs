@@ -12,27 +12,14 @@ pub fn empty(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 
-    let args = db_mover::args::Args {
-        input: in_db.get_uri(),
-        output: out_db.get_uri(),
-        table: vec![],
-        queue_size: Some(100_000),
-        batch_write_size: 10_000,
-        batch_write_retries: 1,
-    };
+    let args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     db_mover::run(args).unwrap();
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 
-    let args = db_mover::args::Args {
-        input: in_db.get_uri(),
-        output: out_db.get_uri(),
-        table: vec!["test".to_owned()],
-        queue_size: Some(100_000),
-        batch_write_size: 10_000,
-        batch_write_retries: 1,
-    };
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
     db_mover::run(args).unwrap();
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
@@ -45,14 +32,8 @@ pub fn one_table(mut in_db: impl TestableDatabase, mut out_db: impl TestableData
     assert_ne!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 
-    let args = db_mover::args::Args {
-        input: in_db.get_uri(),
-        output: out_db.get_uri(),
-        table: vec!["test".to_owned()],
-        queue_size: Some(100_000),
-        batch_write_size: 10_000,
-        batch_write_retries: 1,
-    };
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
     db_mover::run(args).unwrap();
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
@@ -66,14 +47,9 @@ pub fn multiple_tables(mut in_db: impl TestableDatabase, mut out_db: impl Testab
     assert_ne!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_ne!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 
-    let args = db_mover::args::Args {
-        input: in_db.get_uri(),
-        output: out_db.get_uri(),
-        table: vec!["test".to_owned(), "test1".to_owned()],
-        queue_size: Some(100_000),
-        batch_write_size: 10_000,
-        batch_write_retries: 1,
-    };
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+    args.table.push("test1".to_string());
     db_mover::run(args).unwrap();
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));

@@ -1,5 +1,6 @@
 use crate::uri::URI;
 use clap::Parser;
+use tracing::Level;
 
 #[derive(Parser, Clone)]
 #[command(version, about, long_about = None)]
@@ -18,8 +19,8 @@ pub struct Args {
     pub table: Vec<String>,
 
     /// Size of queue between reader and writers
-    #[arg(long, short)]
-    pub queue_size: Option<usize>,
+    #[arg(long, default_value_t = 100_000)]
+    pub queue_size: usize,
 
     /// Size of batches used by writer
     #[arg(long, default_value_t = 1_000)]
@@ -28,4 +29,27 @@ pub struct Args {
     /// Number of retries to write a batch
     #[arg(long, default_value_t = 3)]
     pub batch_write_retries: usize,
+
+    // Disable output
+    #[clap(long, action)]
+    pub quiet: bool,
+
+    /// Log level
+    #[arg(long, default_value_t = Level::INFO)]
+    pub log_level: Level,
+}
+
+impl Args {
+    pub fn new(input: URI, output: URI) -> Self {
+        return Args {
+            input,
+            output,
+            table: Vec::new(),
+            queue_size: 10_000,
+            batch_write_size: 1_000,
+            batch_write_retries: 1,
+            quiet: true,
+            log_level: Level::INFO,
+        };
+    }
 }
