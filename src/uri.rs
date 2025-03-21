@@ -3,9 +3,8 @@ use std::str::FromStr;
 use anyhow::Context;
 
 use crate::databases::postgres::PostgresDB;
-use crate::databases::reader::DBReader;
 use crate::databases::sqlite::SqliteDB;
-use crate::databases::writer::DBWriter;
+use crate::databases::traits::{DBReader, DBWriter};
 
 #[derive(Debug, Clone)]
 pub enum URI {

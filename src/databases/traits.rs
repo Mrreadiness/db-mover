@@ -1,7 +1,21 @@
 use indicatif::ProgressBar;
 use tracing::error;
 
-use crate::{channel::Reciever, databases::row::Row};
+use crate::channel::Sender;
+use crate::{channel::Reciever, databases::table::Row};
+
+pub trait DBInfoProvider: Send {
+    fn get_count(&mut self, table: &str) -> anyhow::Result<u32>;
+}
+
+pub trait DBReader: Send + DBInfoProvider {
+    fn start_reading(
+        &mut self,
+        sender: Sender,
+        table: &str,
+        progress: ProgressBar,
+    ) -> anyhow::Result<()>;
+}
 
 pub trait DBWriter: Send {
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;

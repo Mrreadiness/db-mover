@@ -1,4 +1,4 @@
-use crate::databases::row::Row;
+use crate::databases::table::Row;
 
 pub type Reciever = crossbeam::channel::Receiver<Row>;
 pub type Sender = crossbeam::channel::Sender<Row>;

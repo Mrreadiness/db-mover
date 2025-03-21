@@ -4,10 +4,11 @@ use rusqlite::{params_from_iter, types::ValueRef, Connection, OpenFlags, ToSql};
 
 use crate::{
     channel::Sender,
-    databases::reader::DBReader,
-    databases::row::{Row, Value},
-    databases::writer::DBWriter,
+    databases::table::{Row, Value},
+    databases::traits::{DBReader, DBWriter},
 };
+
+use super::traits::DBInfoProvider;
 
 pub struct SqliteDB {
     connection: Connection,
@@ -55,13 +56,14 @@ impl ToSql for Value {
         }
     }
 }
-
-impl DBReader for SqliteDB {
+impl DBInfoProvider for SqliteDB {
     fn get_count(&mut self, table: &str) -> anyhow::Result<u32> {
         let query = format!("select count(1) from {table}");
         return Ok(self.connection.query_row(&query, [], |row| row.get(0))?);
     }
+}
 
+impl DBReader for SqliteDB {
     fn start_reading(
         &mut self,
         sender: Sender,

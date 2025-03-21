@@ -7,9 +7,10 @@ use postgres::types::Type;
 use postgres::{Client, NoTls};
 
 use crate::channel::Sender;
-use crate::databases::reader::DBReader;
-use crate::databases::row::{Row, Value};
-use crate::databases::writer::DBWriter;
+use crate::databases::table::{Row, Value};
+use crate::databases::traits::{DBReader, DBWriter};
+
+use super::traits::DBInfoProvider;
 
 pub struct PostgresDB {
     client: Client,
@@ -22,13 +23,15 @@ impl PostgresDB {
     }
 }
 
-impl DBReader for PostgresDB {
+impl DBInfoProvider for PostgresDB {
     fn get_count(&mut self, table: &str) -> anyhow::Result<u32> {
         let query = format!("select count(1) from {table}");
         let size: i64 = self.client.query_one(&query, &[])?.get(0);
         return Ok(size.try_into()?);
     }
+}
 
+impl DBReader for PostgresDB {
     fn start_reading(
         &mut self,
         sender: Sender,
