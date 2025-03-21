@@ -23,7 +23,7 @@ pub enum ColumnType {
 }
 
 impl FromStr for ColumnType {
-    type Err = String;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<ColumnType, Self::Err> {
         let foramted = s.trim().to_lowercase();
@@ -44,7 +44,7 @@ impl FromStr for ColumnType {
 
             "blob" | "bytea" => Ok(ColumnType::Bytes),
             "datetime" | "timestamp" | "timestamptz" => Ok(ColumnType::Timestamp),
-            _ => Err("Unknown Column Type format".to_string()),
+            _ => Err(anyhow::anyhow!("Unknown Column Type format")),
         };
     }
 }

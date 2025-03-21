@@ -34,20 +34,17 @@ impl SqliteDB {
         let mut stmt = self
             .connection
             .prepare("SELECT name, type, `notnull` FROM pragma_table_info where arg=?")?;
-        let rows = stmt.query_map([table], |row| {
-            Ok(Column {
+        let mut rows = stmt.query([table])?;
+        let mut result = Vec::new();
+        while let Ok(Some(row)) = rows.next() {
+            result.push(Column {
                 name: row.get(0)?,
                 column_type: {
                     let type_name: String = row.get(1)?;
-                    super::table::ColumnType::from_str(&type_name)
-                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(e.into()))?
+                    super::table::ColumnType::from_str(&type_name)?
                 },
                 nullable: !row.get(2)?,
-            })
-        })?;
-        let mut result = Vec::new();
-        for row in rows {
-            result.push(row?);
+            });
         }
         return Ok(result);
     }
