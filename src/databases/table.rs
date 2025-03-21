@@ -26,6 +26,12 @@ pub struct Column {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Table {
-    name: String,
-    num_rows: u64,
+    pub name: String,
+    pub num_rows: u64,
+}
+
+impl Table {
+    pub fn new(name: String, num_rows: u64) -> Self {
+        return Self { name, num_rows };
+    }
 }

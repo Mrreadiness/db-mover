@@ -17,3 +17,18 @@ fn one_table() {
 fn multiple_tables() {
     testcases::multiple_tables(TestSqliteDatabase::new(), TestSqliteDatabase::new());
 }
+
+#[test]
+fn in_table_not_found() {
+    testcases::in_table_not_found(TestSqliteDatabase::new(), TestSqliteDatabase::new());
+}
+
+#[test]
+fn out_table_not_found() {
+    testcases::out_table_not_found(TestSqliteDatabase::new(), TestSqliteDatabase::new());
+}
+
+#[test]
+fn out_table_is_not_empty() {
+    testcases::out_table_is_not_empty(TestSqliteDatabase::new(), TestSqliteDatabase::new());
+}

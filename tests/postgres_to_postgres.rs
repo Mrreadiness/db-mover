@@ -17,3 +17,18 @@ fn one_table() {
 fn multiple_tables() {
     testcases::multiple_tables(TestPostresDatabase::new(), TestPostresDatabase::new());
 }
+
+#[test]
+fn in_table_not_found() {
+    testcases::in_table_not_found(TestPostresDatabase::new(), TestPostresDatabase::new());
+}
+
+#[test]
+fn out_table_not_found() {
+    testcases::out_table_not_found(TestPostresDatabase::new(), TestPostresDatabase::new());
+}
+
+#[test]
+fn out_table_is_not_empty() {
+    testcases::out_table_is_not_empty(TestPostresDatabase::new(), TestPostresDatabase::new());
+}

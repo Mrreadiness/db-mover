@@ -8,6 +8,8 @@ use crate::{
     databases::traits::{DBInfoProvider, DBReader, DBWriter},
 };
 
+use super::table::Table;
+
 mod value;
 
 pub struct SqliteDB {
@@ -28,9 +30,10 @@ impl SqliteDB {
 }
 
 impl DBInfoProvider for SqliteDB {
-    fn get_count(&mut self, table: &str) -> anyhow::Result<u32> {
+    fn get_table_info(&mut self, table: &str) -> anyhow::Result<Table> {
         let query = format!("select count(1) from {table}");
-        return Ok(self.connection.query_row(&query, [], |row| row.get(0))?);
+        let size: u32 = self.connection.query_row(&query, [], |row| row.get(0))?;
+        return Ok(Table::new(table.to_string(), size.into()));
     }
 }
 

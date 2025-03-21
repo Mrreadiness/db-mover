@@ -55,3 +55,32 @@ pub fn multiple_tables(mut in_db: impl TestableDatabase, mut out_db: impl Testab
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 }
+
+pub fn in_table_not_found(in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+    out_db.create_test_table("test");
+
+    assert!(db_mover::run(args.clone()).is_err());
+}
+
+pub fn out_table_not_found(mut in_db: impl TestableDatabase, out_db: impl TestableDatabase) {
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+    in_db.create_test_table("test");
+
+    assert!(db_mover::run(args.clone()).is_err());
+}
+
+pub fn out_table_is_not_empty(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+    create_test_tables(&mut in_db, &mut out_db);
+    assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
+    assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
+    in_db.fill_test_table("test", 10);
+    out_db.fill_test_table("test", 10);
+
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+
+    assert!(db_mover::run(args.clone()).is_err());
+}

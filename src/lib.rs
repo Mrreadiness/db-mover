@@ -11,8 +11,16 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
     for table in &args.table {
         let (sender, reciever) = channel::create_channel(args.queue_size);
         let mut reader = args.input.create_reader()?;
-        let table_size = reader.get_count(table)?.into();
-        let tracker = progress::TableMigrationProgress::new(&args, table, table_size);
+        let table_info = reader
+            .get_table_info(table)
+            .context("Unable to get information about source table")?;
+        let writer_table_info = writer
+            .get_table_info(table)
+            .context("Unable to get information about destination table")?;
+        if writer_table_info.num_rows > 0 {
+            return Err(anyhow::anyhow!("Destination table should be empty"));
+        }
+        let tracker = progress::TableMigrationProgress::new(&args, table, table_info.num_rows);
 
         let reader_handle = std::thread::spawn({
             let table = table.clone();

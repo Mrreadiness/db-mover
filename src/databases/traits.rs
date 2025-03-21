@@ -4,8 +4,10 @@ use tracing::error;
 use crate::channel::Sender;
 use crate::{channel::Reciever, databases::table::Row};
 
+use super::table::Table;
+
 pub trait DBInfoProvider: Send {
-    fn get_count(&mut self, table: &str) -> anyhow::Result<u32>;
+    fn get_table_info(&mut self, table: &str) -> anyhow::Result<Table>;
 }
 
 pub trait DBReader: Send + DBInfoProvider {
@@ -17,7 +19,7 @@ pub trait DBReader: Send + DBInfoProvider {
     ) -> anyhow::Result<()>;
 }
 
-pub trait DBWriter: Send {
+pub trait DBWriter: Send + DBInfoProvider {
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;
 
     fn write_batch_with_retry(

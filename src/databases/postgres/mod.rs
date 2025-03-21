@@ -10,6 +10,8 @@ use crate::channel::Sender;
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
 
+use super::table::Table;
+
 mod value;
 
 pub struct PostgresDB {
@@ -24,10 +26,10 @@ impl PostgresDB {
 }
 
 impl DBInfoProvider for PostgresDB {
-    fn get_count(&mut self, table: &str) -> anyhow::Result<u32> {
-        let query = format!("select count(1) from {table}");
-        let size: i64 = self.client.query_one(&query, &[])?.get(0);
-        return Ok(size.try_into()?);
+    fn get_table_info(&mut self, table: &str) -> anyhow::Result<Table> {
+        let count_query = format!("select count(1) from {table}");
+        let size: i64 = self.client.query_one(&count_query, &[])?.get(0);
+        return Ok(Table::new(table.to_string(), size.try_into()?));
     }
 }
 
