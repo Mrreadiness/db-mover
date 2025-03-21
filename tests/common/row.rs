@@ -1,6 +1,7 @@
 use chrono::NaiveDateTime;
+use fake::Dummy;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Dummy)]
 pub struct TestRow {
     pub id: i64,
     pub real: f64,

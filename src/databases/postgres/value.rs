@@ -26,7 +26,7 @@ impl TryFrom<(&Type, &postgres::Row, usize)> for Value {
             &Type::TIMESTAMP => row
                 .get::<_, Option<NaiveDateTime>>(idx)
                 .map_or(Value::Null, Value::Timestamp),
-            _ => return Err(anyhow::anyhow!("Unsuppoerted type")),
+            _ => return Err(anyhow::anyhow!("Unsupported type")),
         };
         return Ok(value);
     }

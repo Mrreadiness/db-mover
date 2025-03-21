@@ -1,4 +1,3 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
 use fake::{Fake, Faker};
 use postgres::{Client, NoTls};
 
@@ -61,10 +60,12 @@ impl TestableDatabase for TestPostresDatabase {
         let stmt = self.client.prepare(&query).unwrap();
 
         for i in 1..num_rows + 1 {
-            let ts = Utc::now().naive_utc();
-            let data = Faker.fake::<(f64, String, Vec<u8>)>();
+            let row: TestRow = Faker.fake();
             self.client
-                .execute(&stmt, &[&(i as i64), &data.0, &data.1, &data.2, &ts])
+                .execute(
+                    &stmt,
+                    &[&(i as i64), &row.real, &row.text, &row.blob, &row.timestamp],
+                )
                 .unwrap();
         }
     }

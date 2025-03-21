@@ -7,7 +7,7 @@ mod common;
 
 use common::testable_database::TestableDatabase;
 
-const NUM_ROWS: usize = 100_0;
+const NUM_ROWS: usize = 10_000;
 
 fn sqlite_to_sqlite(c: &mut Criterion) {
     let mut input = common::sqlite::TestSqliteDatabase::new();
