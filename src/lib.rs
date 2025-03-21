@@ -1,5 +1,4 @@
 use anyhow::Context;
-use indicatif::MultiProgress;
 
 pub mod args;
 pub mod channel;
@@ -11,36 +10,23 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
     let mut writer = args.output.create_writer()?;
     for table in &args.table {
         let (sender, reciever) = channel::create_channel(args.queue_size);
-        let multi_bars = MultiProgress::new();
-        let reader_progress = progress::get_progress_bar();
-        let writer_progress = progress::get_progress_bar();
+        let mut reader = args.input.create_reader()?;
+        let table_size = reader.get_count(table)?.into();
+        let tracker = progress::TableMigrationProgress::new(&args, table, table_size);
 
-        multi_bars.add(reader_progress.clone());
-        multi_bars.add(writer_progress.clone());
-        if args.quiet {
-            multi_bars.set_draw_target(indicatif::ProgressDrawTarget::hidden());
-        }
-        reader_progress.position();
         let reader_handle = std::thread::spawn({
-            let args = args.clone();
             let table = table.clone();
-            let mut reader = args.input.create_reader()?;
-            let table_size = reader.get_count(&table)?.into();
-            reader_progress.set_length(table_size);
-            writer_progress.set_length(table_size);
-            reader_progress.set_message(format!("Reading table {table}"));
             move || {
-                return reader.start_reading(sender, &table, reader_progress);
+                return reader.start_reading(sender, &table, tracker.reader);
             }
         });
-        writer_progress.set_message(format!("Writing table {table}"));
         writer
             .start_writing(
                 reciever,
                 table,
                 args.batch_write_size,
                 args.batch_write_retries,
-                writer_progress,
+                tracker.writer,
             )
             .context("Writer failed")?;
         let reader_result = reader_handle.join().expect("Reader panicked");

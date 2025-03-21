@@ -1,7 +1,7 @@
 use indicatif::ProgressBar;
 use tracing::error;
 
-use crate::{channel::Reciever, databases::row::Row, progress::log_progress_bar_if_no_term};
+use crate::{channel::Reciever, databases::row::Row};
 
 pub trait DBWriter: Send {
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;
@@ -38,14 +38,12 @@ pub trait DBWriter: Send {
             if batch.len() == batch_size {
                 self.write_batch_with_retry(&batch, table, batch_retries)?;
                 progress.inc(batch.len().try_into()?);
-                log_progress_bar_if_no_term(&progress);
                 batch.clear();
             }
         }
         if !batch.is_empty() {
             self.write_batch_with_retry(&batch, table, batch_retries)?;
             progress.inc(batch.len().try_into()?);
-            log_progress_bar_if_no_term(&progress);
         }
         progress.finish();
         return Ok(());
