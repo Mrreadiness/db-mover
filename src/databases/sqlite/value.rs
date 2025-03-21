@@ -1,20 +1,23 @@
-use crate::databases::table::Value;
-use anyhow::Context;
-use rusqlite::{types::ValueRef, ToSql};
+use crate::databases::table::{Column, ColumnType, Value};
+use rusqlite::{
+    types::{FromSql, ValueRef},
+    ToSql,
+};
 
-impl TryFrom<ValueRef<'_>> for Value {
+impl TryFrom<(&Column, ValueRef<'_>)> for Value {
     type Error = anyhow::Error;
 
-    fn try_from(value: ValueRef<'_>) -> Result<Self, Self::Error> {
-        let parsed = match value {
-            ValueRef::Null => Value::Null,
-            ValueRef::Integer(val) => Value::I64(val),
-            ValueRef::Real(val) => Value::F64(val),
-            ValueRef::Text(val) => {
-                let val = std::str::from_utf8(val).context("invalid UTF-8")?;
-                Value::String(val.to_string())
-            }
-            ValueRef::Blob(val) => Value::Bytes(val.to_vec()),
+    fn try_from(value: (&Column, ValueRef<'_>)) -> Result<Self, Self::Error> {
+        let (column, val) = value;
+        if val == ValueRef::Null {
+            return Ok(Value::Null);
+        }
+        let parsed = match column.column_type {
+            ColumnType::I64 => Value::I64(FromSql::column_result(val)?),
+            ColumnType::F64 => Value::F64(FromSql::column_result(val)?),
+            ColumnType::String => Value::String(FromSql::column_result(val)?),
+            ColumnType::Bytes => Value::Bytes(FromSql::column_result(val)?),
+            ColumnType::Timestamp => Value::Timestamp(FromSql::column_result(val)?),
         };
         return Ok(parsed);
     }
@@ -28,6 +31,7 @@ impl ToSql for Value {
             Value::F64(val) => val.to_sql(),
             Value::String(val) => val.to_sql(),
             Value::Bytes(val) => val.to_sql(),
+            Value::Timestamp(val) => val.to_sql(),
         }
     }
 }

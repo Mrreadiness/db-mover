@@ -1,3 +1,4 @@
+use chrono::{DateTime, NaiveDateTime, Utc};
 use fake::{Fake, Faker};
 use postgres::{Client, NoTls};
 
@@ -48,7 +49,7 @@ impl TestableDatabase for TestPostresDatabase {
 
     fn create_test_table(&mut self, name: &str) {
         let query = format!(
-        "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real DOUBLE PRECISION, text TEXT, blob BYTEA)"
+        "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real DOUBLE PRECISION, text TEXT, blob BYTEA, timestamp TIMESTAMP)"
         );
         self.client
             .execute(&query, &[])
@@ -56,13 +57,14 @@ impl TestableDatabase for TestPostresDatabase {
     }
 
     fn fill_test_table(&mut self, name: &str, num_rows: usize) {
-        let query = format!("INSERT INTO {name} VALUES ($1, $2, $3, $4)");
+        let query = format!("INSERT INTO {name} VALUES ($1, $2, $3, $4, $5)");
         let stmt = self.client.prepare(&query).unwrap();
 
         for i in 1..num_rows + 1 {
+            let ts = Utc::now().naive_utc();
             let data = Faker.fake::<(f64, String, Vec<u8>)>();
             self.client
-                .execute(&stmt, &[&(i as i64), &data.0, &data.1, &data.2])
+                .execute(&stmt, &[&(i as i64), &data.0, &data.1, &data.2, &ts])
                 .unwrap();
         }
     }

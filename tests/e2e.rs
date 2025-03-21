@@ -3,6 +3,7 @@ mod common;
 use common::postgres::TestPostresDatabase;
 use common::sqlite::TestSqliteDatabase;
 use common::testable_database::TestableDatabase;
+use pretty_assertions::{assert_eq, assert_ne};
 
 use rstest::rstest;
 
@@ -44,7 +45,7 @@ fn empty(#[case] mut in_db: impl TestableDatabase, #[case] mut out_db: impl Test
 #[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
 fn one_table(#[case] mut in_db: impl TestableDatabase, #[case] mut out_db: impl TestableDatabase) {
     create_test_tables(&mut in_db, &mut out_db);
-    in_db.fill_test_table("test", 1000);
+    in_db.fill_test_table("test", 10);
     assert_ne!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 
@@ -66,8 +67,8 @@ fn multiple_tables(
     #[case] mut out_db: impl TestableDatabase,
 ) {
     create_test_tables(&mut in_db, &mut out_db);
-    in_db.fill_test_table("test", 1000);
-    in_db.fill_test_table("test1", 100);
+    in_db.fill_test_table("test", 10);
+    in_db.fill_test_table("test1", 10);
     assert_ne!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_ne!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 

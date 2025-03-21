@@ -1,8 +1,39 @@
 use std::io::Write;
 
+use chrono::NaiveDateTime;
 use postgres::types::Type;
 
 use crate::databases::table::Value;
+
+impl TryFrom<(&Type, &postgres::Row, usize)> for Value {
+    type Error = anyhow::Error;
+
+    fn try_from(value: (&Type, &postgres::Row, usize)) -> Result<Self, Self::Error> {
+        let (column_type, row, idx) = value;
+        let value = match column_type {
+            &Type::INT8 => row
+                .get::<_, Option<i64>>(idx)
+                .map_or(Value::Null, Value::I64),
+            &Type::FLOAT8 => row
+                .get::<_, Option<f64>>(idx)
+                .map_or(Value::Null, Value::F64),
+            &Type::VARCHAR | &Type::TEXT | &Type::BPCHAR => row
+                .get::<_, Option<String>>(idx)
+                .map_or(Value::Null, Value::String),
+            &Type::BYTEA => row
+                .get::<_, Option<Vec<u8>>>(idx)
+                .map_or(Value::Null, Value::Bytes),
+            &Type::TIMESTAMP => row
+                .get::<_, Option<NaiveDateTime>>(idx)
+                .map_or(Value::Null, Value::Timestamp),
+            _ => return Err(anyhow::anyhow!("Unsuppoerted type")),
+        };
+        return Ok(value);
+    }
+}
+
+// Microseconds since 2000-01-01 00:00
+const POSTGRES_EPOCH_MICROS: i64 = 946684800000000;
 
 impl Value {
     pub(crate) fn write_postgres_bytes(
@@ -49,10 +80,10 @@ impl Value {
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
                 writer.write_all(&bytes)?;
             }
-            (&Type::TIME, &Value::I64(num)) => {
-                let num = i16::try_from(num)?;
-                writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
-                writer.write_all(&num.to_be_bytes())?;
+            (&Type::TIMESTAMP, &Value::Timestamp(dt)) => {
+                let val = dt.and_utc().timestamp_micros() - POSTGRES_EPOCH_MICROS;
+                writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
+                writer.write_all(&val.to_be_bytes())?;
             }
             _ => return Err(anyhow::anyhow!("Unsuppoerted type conversion")),
         };

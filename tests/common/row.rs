@@ -1,9 +1,12 @@
+use chrono::NaiveDateTime;
+
 #[derive(PartialEq, Debug)]
 pub struct TestRow {
     pub id: i64,
     pub real: f64,
     pub text: String,
     pub blob: Vec<u8>,
+    pub timestamp: NaiveDateTime,
 }
 
 impl From<postgres::Row> for TestRow {
@@ -13,6 +16,7 @@ impl From<postgres::Row> for TestRow {
             real: row.get(1),
             text: row.get(2),
             blob: row.get(3),
+            timestamp: row.get(4),
         };
     }
 }
@@ -24,6 +28,7 @@ impl From<&rusqlite::Row<'_>> for TestRow {
             real: row.get_unwrap(1),
             text: row.get_unwrap(2),
             blob: row.get_unwrap(3),
+            timestamp: row.get_unwrap(4),
         };
     }
 }

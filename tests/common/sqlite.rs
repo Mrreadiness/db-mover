@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use chrono::{NaiveDateTime, Utc};
 use db_mover::uri::URI;
 use fake::{Fake, Faker};
 use rusqlite::{params, Connection, OpenFlags};
@@ -40,18 +41,20 @@ impl TestableDatabase for TestSqliteDatabase {
 
     fn create_test_table(&mut self, table_name: &str) {
         let query = format!(
-            "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY, real REAL, text TEXT, blob BLOB)"
+            "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY, real REAL, text TEXT, blob BLOB, timestamp DATETIME)"
         );
         self.conn.execute(&query, []).unwrap();
     }
 
     fn fill_test_table(&mut self, table_name: &str, num_rows: usize) {
-        let query = format!("INSERT INTO {table_name} VALUES (?1, ?2, ?3, ?4)");
+        let query = format!("INSERT INTO {table_name} VALUES (?1, ?2, ?3, ?4, ?5)");
         let mut stmt = self.conn.prepare(&query).unwrap();
 
         for i in 1..num_rows + 1 {
+            let ts = Utc::now().naive_utc();
             let data = Faker.fake::<(f64, String, Vec<u8>)>();
-            stmt.execute(params![i, data.0, data.1, data.2]).unwrap();
+            stmt.execute(params![i, data.0, data.1, data.2, ts])
+                .unwrap();
         }
     }
 

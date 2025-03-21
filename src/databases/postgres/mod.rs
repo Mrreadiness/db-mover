@@ -3,7 +3,6 @@ use std::io::Write;
 use anyhow::Context;
 use indicatif::ProgressBar;
 use postgres::fallible_iterator::FallibleIterator;
-use postgres::types::Type;
 use postgres::{Client, NoTls};
 
 use crate::channel::Sender;
@@ -57,22 +56,7 @@ impl DBReader for PostgresDB {
         {
             let mut result: Row = Vec::with_capacity(columns.len());
             for (idx, column) in columns.iter().enumerate() {
-                let value = match column.type_() {
-                    &Type::INT8 => row
-                        .get::<_, Option<i64>>(idx)
-                        .map_or(Value::Null, Value::I64),
-                    &Type::FLOAT8 => row
-                        .get::<_, Option<f64>>(idx)
-                        .map_or(Value::Null, Value::F64),
-                    &Type::VARCHAR | &Type::TEXT | &Type::BPCHAR => row
-                        .get::<_, Option<String>>(idx)
-                        .map_or(Value::Null, Value::String),
-                    &Type::BYTEA => row
-                        .get::<_, Option<Vec<u8>>>(idx)
-                        .map_or(Value::Null, Value::Bytes),
-                    _ => panic!("Type doesn't supported"),
-                };
-                result.push(value);
+                result.push(Value::try_from((column.type_(), &row, idx))?);
             }
             sender
                 .send(result)
@@ -111,7 +95,7 @@ impl DBWriter for PostgresDB {
         writer.write_all(&0_i32.to_be_bytes())?;
 
         for row in batch {
-            // Num of fields
+            // Count of fields
             writer.write_all(&(row.len() as i16).to_be_bytes())?;
             for (value, column) in std::iter::zip(row, columns) {
                 value.write_postgres_bytes(column.type_(), &mut writer)?;

@@ -1,9 +1,13 @@
+use chrono::NaiveDateTime;
+use std::str::FromStr;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     String(String),
     Bytes(Vec<u8>),
     I64(i64),
     F64(f64),
+    Timestamp(NaiveDateTime),
     Null,
 }
 
@@ -15,13 +19,41 @@ pub enum ColumnType {
     Bytes,
     I64,
     F64,
+    Timestamp,
+}
+
+impl FromStr for ColumnType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<ColumnType, Self::Err> {
+        let foramted = s.trim().to_lowercase();
+        if foramted.starts_with("varchar")
+            | foramted.starts_with("nvarchar")
+            | foramted.starts_with("nchar")
+        {
+            return Ok(ColumnType::String);
+        }
+        return match foramted.as_str() {
+            "tinyint" | "smallint" | "integer" | "bigint" => Ok(ColumnType::I64),
+            "float" | "real" | "double" | "double precision" | "numeric" | "decimal" => {
+                Ok(ColumnType::F64)
+            }
+            "character" | "varchar" | "nvarchar" | "char" | "nchar" | "clob" | "text" => {
+                Ok(ColumnType::String)
+            }
+
+            "blob" | "bytea" => Ok(ColumnType::Bytes),
+            "datetime" | "timestamp" | "timestamptz" => Ok(ColumnType::Timestamp),
+            _ => Err("Unknown Column Type format".to_string()),
+        };
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Column {
-    name: String,
-    column_type: ColumnType,
-    nullable: bool,
+    pub name: String,
+    pub column_type: ColumnType,
+    pub nullable: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

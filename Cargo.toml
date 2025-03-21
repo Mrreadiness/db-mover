@@ -8,12 +8,14 @@ edition = "2021"
 anyhow = "1.0.95"
 clap = { version = "4.5.23", features = ["derive"] }
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
-rusqlite = { version = "0.32.1", features = ["column_decltype", "bundled", "time"] }
-postgres = "0.19.9"
+rusqlite = { version = "0.32.1", features = ["column_decltype", "bundled", "chrono"] }
+postgres = { version = "0.19.9", features = ["with-chrono-0_4"] }
 indicatif = "0.17.11"
 console = "0.15.11"
 tracing-subscriber = "0.3.19"
 tracing = "0.1.41"
+chrono = "0.4.40"
+pretty_assertions = "1.4.1"
 
 [dev-dependencies]
 criterion = "0.5.1"

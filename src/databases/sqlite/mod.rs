@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::Context;
 use indicatif::ProgressBar;
 use rusqlite::{params_from_iter, Connection, OpenFlags};
@@ -8,7 +10,7 @@ use crate::{
     databases::traits::{DBInfoProvider, DBReader, DBWriter},
 };
 
-use super::table::Table;
+use super::table::{Column, Table};
 
 mod value;
 
@@ -27,6 +29,28 @@ impl SqliteDB {
         )?;
         return Ok(SqliteDB { connection: conn });
     }
+
+    fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<Column>> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT name, type, `notnull` FROM pragma_table_info where arg=?")?;
+        let rows = stmt.query_map([table], |row| {
+            Ok(Column {
+                name: row.get(0)?,
+                column_type: {
+                    let type_name: String = row.get(1)?;
+                    super::table::ColumnType::from_str(&type_name)
+                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(e.into()))?
+                },
+                nullable: !row.get(2)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        return Ok(result);
+    }
 }
 
 impl DBInfoProvider for SqliteDB {
@@ -44,6 +68,7 @@ impl DBReader for SqliteDB {
         table: &str,
         progress: ProgressBar,
     ) -> anyhow::Result<()> {
+        let columns = self.get_columns(table)?;
         let query = format!("select * from {table}");
         let mut stmt = self
             .connection
@@ -53,10 +78,9 @@ impl DBReader for SqliteDB {
         let mut rows = stmt.query([]).context("Failed to read rows")?;
         while let Ok(Some(row)) = rows.next() {
             let mut result: Row = Vec::with_capacity(column_count);
-            for idx in 0..column_count {
-                result.push(Value::try_from(
-                    row.get_ref(idx).context("Failed to read vaule")?,
-                )?);
+            for (idx, column) in columns.iter().enumerate() {
+                let raw = row.get_ref(idx)?;
+                result.push(Value::try_from((column, raw))?);
             }
             sender
                 .send(result)
