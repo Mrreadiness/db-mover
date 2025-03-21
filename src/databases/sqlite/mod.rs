@@ -1,14 +1,14 @@
 use anyhow::Context;
 use indicatif::ProgressBar;
-use rusqlite::{params_from_iter, types::ValueRef, Connection, OpenFlags, ToSql};
+use rusqlite::{params_from_iter, Connection, OpenFlags};
 
 use crate::{
     channel::Sender,
     databases::table::{Row, Value},
-    databases::traits::{DBReader, DBWriter},
+    databases::traits::{DBInfoProvider, DBReader, DBWriter},
 };
 
-use super::traits::DBInfoProvider;
+mod value;
 
 pub struct SqliteDB {
     connection: Connection,
@@ -27,35 +27,6 @@ impl SqliteDB {
     }
 }
 
-impl TryFrom<ValueRef<'_>> for Value {
-    type Error = anyhow::Error;
-
-    fn try_from(value: ValueRef<'_>) -> Result<Self, Self::Error> {
-        let parsed = match value {
-            ValueRef::Null => Value::Null,
-            ValueRef::Integer(val) => Value::I64(val),
-            ValueRef::Real(val) => Value::F64(val),
-            ValueRef::Text(val) => {
-                let val = std::str::from_utf8(val).context("invalid UTF-8")?;
-                Value::String(val.to_string())
-            }
-            ValueRef::Blob(val) => Value::Bytes(val.to_vec()),
-        };
-        return Ok(parsed);
-    }
-}
-
-impl ToSql for Value {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        match self {
-            Value::Null => None::<i32>.to_sql(),
-            Value::I64(val) => val.to_sql(),
-            Value::F64(val) => val.to_sql(),
-            Value::String(val) => val.to_sql(),
-            Value::Bytes(val) => val.to_sql(),
-        }
-    }
-}
 impl DBInfoProvider for SqliteDB {
     fn get_count(&mut self, table: &str) -> anyhow::Result<u32> {
         let query = format!("select count(1) from {table}");
