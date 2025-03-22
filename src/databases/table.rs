@@ -59,11 +59,11 @@ pub struct Column {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Table {
     pub name: String,
-    pub num_rows: u64,
+    pub num_rows: Option<u64>,
 }
 
 impl Table {
-    pub fn new(name: String, num_rows: u64) -> Self {
+    pub fn new(name: String, num_rows: Option<u64>) -> Self {
         return Self { name, num_rows };
     }
 }

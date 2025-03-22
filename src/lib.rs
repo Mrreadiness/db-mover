@@ -12,12 +12,12 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
         let (sender, reciever) = channel::create_channel(args.queue_size);
         let mut reader = args.input.create_reader()?;
         let table_info = reader
-            .get_table_info(table)
+            .get_table_info(table, args.no_count)
             .context("Unable to get information about source table")?;
         let writer_table_info = writer
-            .get_table_info(table)
+            .get_table_info(table, false)
             .context("Unable to get information about destination table")?;
-        if writer_table_info.num_rows > 0 {
+        if writer_table_info.num_rows != Some(0) {
             return Err(anyhow::anyhow!("Destination table should be empty"));
         }
         let tracker = progress::TableMigrationProgress::new(&args, table, table_info.num_rows);

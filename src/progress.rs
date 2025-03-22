@@ -1,4 +1,4 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle, TermLike};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle, TermLike};
 use std::io;
 use tracing::info;
 
@@ -58,7 +58,7 @@ pub struct TableMigrationProgress {
 }
 
 impl TableMigrationProgress {
-    pub fn new(args: &Args, table: &str, num_rows: u64) -> Self {
+    pub fn new(args: &Args, table: &str, num_rows: Option<u64>) -> Self {
         let multibar = MultiProgress::new();
         if args.quiet {
             multibar.set_draw_target(indicatif::ProgressDrawTarget::hidden());
@@ -72,8 +72,10 @@ impl TableMigrationProgress {
                 "{msg} [{elapsed_precise}] {bar:40} {percent}% {human_pos}/{human_len} Rows per sec: {per_sec} ETA: {eta}",
             )
             .unwrap();
-        let reader = ProgressBar::new(num_rows).with_style(style.clone());
-        let writer = ProgressBar::new(num_rows).with_style(style);
+        let reader = ProgressBar::with_draw_target(num_rows, ProgressDrawTarget::stderr())
+            .with_style(style.clone());
+        let writer =
+            ProgressBar::with_draw_target(num_rows, ProgressDrawTarget::stderr()).with_style(style);
 
         multibar.add(reader.clone());
         multibar.add(writer.clone());

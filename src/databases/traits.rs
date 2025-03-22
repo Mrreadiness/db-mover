@@ -7,7 +7,7 @@ use crate::{channel::Reciever, databases::table::Row};
 use super::table::Table;
 
 pub trait DBInfoProvider: Send {
-    fn get_table_info(&mut self, table: &str) -> anyhow::Result<Table>;
+    fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<Table>;
 }
 
 pub trait DBReader: Send + DBInfoProvider {

@@ -25,10 +25,18 @@ impl PostgresDB {
 }
 
 impl DBInfoProvider for PostgresDB {
-    fn get_table_info(&mut self, table: &str) -> anyhow::Result<Table> {
-        let count_query = format!("select count(1) from {table}");
-        let size: i64 = self.client.query_one(&count_query, &[])?.get(0);
-        return Ok(Table::new(table.to_string(), size.try_into()?));
+    fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<Table> {
+        let mut size = None;
+        if !no_count {
+            let count_query = format!("select count(1) from {table}");
+            size = Some(
+                self.client
+                    .query_one(&count_query, &[])?
+                    .get::<_, i64>(0)
+                    .try_into()?,
+            );
+        }
+        return Ok(Table::new(table.to_string(), size));
     }
 }
 

@@ -30,13 +30,19 @@ pub struct Args {
     #[arg(long, default_value_t = 3)]
     pub batch_write_retries: usize,
 
-    // Disable output
+    /// Disable output
     #[clap(long, action)]
     pub quiet: bool,
 
     /// Log level
     #[arg(long, default_value_t = Level::INFO)]
     pub log_level: Level,
+
+    /// Disable the COUNT query used for progress tracking.
+    /// Progress will be shown but without prognoses.
+    /// Only for input table.
+    #[clap(long, action)]
+    pub no_count: bool,
 }
 
 impl Args {
@@ -50,6 +56,7 @@ impl Args {
             batch_write_retries: 1,
             quiet: true,
             log_level: Level::INFO,
+            no_count: false,
         };
     }
 }
