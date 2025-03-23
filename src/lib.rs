@@ -1,4 +1,5 @@
 use anyhow::Context;
+use databases::traits::{DBReader, DBWriter};
 
 pub mod args;
 pub mod channel;
@@ -8,7 +9,6 @@ pub mod uri;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
     for table in &args.table {
-        let (sender, reciever) = channel::create_channel(args.queue_size);
         let mut reader = args.input.create_reader()?;
         let mut writer = args.output.create_writer()?;
         let table_info = reader
@@ -21,53 +21,73 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
             return Err(anyhow::anyhow!("Destination table should be empty"));
         }
         let tracker = progress::TableMigrationProgress::new(&args, table, table_info.num_rows);
+        process_table(&args, reader, writer, tracker, table)?;
+    }
+    return Ok(());
+}
 
-        std::thread::scope(|s| {
-            s.spawn(|| {
-                return reader
-                    .start_reading(sender, table, tracker.reader)
-                    .context("Reader failed");
-            });
-            if args.writer_workers > 1 {
-                s.spawn({
-                    let mut new_writer = match writer.opt_clone() {
-                        Some(Ok(new_writer)) => new_writer,
-                        Some(Err(e)) => return Err(e),
-                        None => {
-                            return Err(anyhow::anyhow!(
-                                "This type of databases doesn't support mutiple writers"
-                            ))
-                        }
-                    };
-                    let reciever = reciever.clone();
-                    let progress = tracker.writer.clone();
-                    move || {
-                        return new_writer
-                            .start_writing(
-                                reciever,
-                                table,
-                                args.batch_write_size,
-                                args.batch_write_retries,
-                                progress,
-                            )
-                            .context("Writer failed");
+fn process_table(
+    args: &args::Args,
+    mut reader: Box<dyn DBReader>,
+    mut writer: Box<dyn DBWriter>,
+    tracker: progress::TableMigrationProgress,
+    table: &str,
+) -> anyhow::Result<()> {
+    return std::thread::scope(|s| {
+        let (sender, reciever) = channel::create_channel(args.queue_size);
+        let mut handles = Vec::new();
+        handles.push(s.spawn(|| {
+            return reader
+                .start_reading(sender, table, tracker.reader)
+                .context("Reader failed");
+        }));
+        if args.writer_workers > 1 {
+            handles.push(s.spawn({
+                let mut new_writer = match writer.opt_clone() {
+                    Some(Ok(new_writer)) => new_writer,
+                    Some(Err(e)) => return Err(e),
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "This type of databases doesn't support mutiple writers"
+                        ))
                     }
-                });
-            } else {
-                s.spawn(|| {
-                    return writer
+                };
+                move || {
+                    return new_writer
                         .start_writing(
-                            reciever,
+                            reciever.clone(),
                             table,
                             args.batch_write_size,
                             args.batch_write_retries,
-                            tracker.writer,
+                            tracker.writer.clone(),
                         )
                         .context("Writer failed");
-                });
-            }
-            return Ok(());
-        })?;
-    }
-    return Ok(());
+                }
+            }));
+        } else {
+            handles.push(s.spawn(|| {
+                return writer
+                    .start_writing(
+                        reciever,
+                        table,
+                        args.batch_write_size,
+                        args.batch_write_retries,
+                        tracker.writer,
+                    )
+                    .context("Writer failed");
+            }));
+        }
+        let mut got_error = false;
+        for handle in handles {
+            let _ = handle.join().unwrap().map_err(|err| {
+                tracing::error!("{}", err);
+                got_error = true;
+                return err;
+            });
+        }
+        if got_error {
+            return Err(anyhow::anyhow!("Stopped because of the error"));
+        }
+        return Ok(());
+    });
 }
