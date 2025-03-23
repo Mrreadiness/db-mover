@@ -20,6 +20,10 @@ pub trait DBReader: Send + DBInfoProvider {
 }
 
 pub trait DBWriter: Send + DBInfoProvider {
+    fn opt_clone(&self) -> Option<anyhow::Result<Box<dyn DBWriter>>> {
+        return None;
+    }
+
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;
 
     fn write_batch_with_retry(

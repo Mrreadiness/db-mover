@@ -22,6 +22,10 @@ pub struct Args {
     #[arg(long, default_value_t = 100_000)]
     pub queue_size: usize,
 
+    /// Number of writer workers (if supported by database)
+    #[arg(long, default_value_t = 1)]
+    pub writer_workers: usize,
+
     /// Size of batches used by writer
     #[arg(long, default_value_t = 1_000)]
     pub batch_write_size: usize,
@@ -52,6 +56,7 @@ impl Args {
             output,
             table: Vec::new(),
             queue_size: 10_000,
+            writer_workers: 1,
             batch_write_size: 1_000,
             batch_write_retries: 1,
             quiet: true,
