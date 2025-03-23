@@ -76,9 +76,9 @@ impl Value {
             (&Type::VARCHAR, Value::String(string))
             | (&Type::TEXT, Value::String(string))
             | (&Type::BPCHAR, Value::String(string)) => {
-                let bytes = string.clone().into_bytes();
+                let bytes = string.as_bytes();
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
-                writer.write_all(&bytes)?;
+                writer.write_all(bytes)?;
             }
             (&Type::TIMESTAMP, &Value::Timestamp(dt)) => {
                 let val = dt.and_utc().timestamp_micros() - POSTGRES_EPOCH_MICROS;
