@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Context;
 use indicatif::ProgressBar;
@@ -8,6 +9,7 @@ use postgres::{Client, NoTls};
 use crate::channel::Sender;
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
+use crate::error::Error;
 
 use super::table::Table;
 
@@ -50,7 +52,8 @@ impl DBReader for PostgresDB {
         sender: Sender,
         table: &str,
         progress: ProgressBar,
-    ) -> anyhow::Result<()> {
+        stopped: &AtomicBool,
+    ) -> Result<(), Error> {
         let query = format!("select * from {table}");
         let stmt = self
             .client
@@ -66,13 +69,14 @@ impl DBReader for PostgresDB {
             .next()
             .context("Error while reading data from postgres")?
         {
+            if stopped.load(Ordering::Relaxed) {
+                return Err(Error::Stopped);
+            }
             let mut result: Row = Vec::with_capacity(columns.len());
             for (idx, column) in columns.iter().enumerate() {
                 result.push(Value::try_from((column.type_(), &row, idx))?);
             }
-            sender
-                .send(result)
-                .context("Failed to send data to queue")?;
+            sender.send(result).map_err(|_| Error::Stopped)?;
             progress.inc(1);
         }
         progress.finish();

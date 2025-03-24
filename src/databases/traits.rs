@@ -1,7 +1,10 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use indicatif::ProgressBar;
 use tracing::error;
 
 use crate::channel::Sender;
+use crate::error::Error;
 use crate::{channel::Reciever, databases::table::Row};
 
 use super::table::Table;
@@ -16,7 +19,8 @@ pub trait DBReader: Send + DBInfoProvider {
         sender: Sender,
         table: &str,
         progress: ProgressBar,
-    ) -> anyhow::Result<()>;
+        stopped: &AtomicBool,
+    ) -> Result<(), Error>;
 }
 
 pub trait DBWriter: Send + DBInfoProvider {
@@ -51,19 +55,23 @@ pub trait DBWriter: Send + DBInfoProvider {
         batch_size: usize,
         batch_retries: usize,
         progress: ProgressBar,
-    ) -> anyhow::Result<()> {
+        stopped: &AtomicBool,
+    ) -> Result<(), Error> {
         let mut batch: Vec<Row> = Vec::with_capacity(batch_size);
         while let Ok(row) = reciever.recv() {
+            if stopped.load(Ordering::Relaxed) {
+                return Err(Error::Stopped);
+            }
             batch.push(row);
             if batch.len() == batch_size {
                 self.write_batch_with_retry(&batch, table, batch_retries)?;
-                progress.inc(batch.len().try_into()?);
+                progress.inc(batch.len().try_into().unwrap());
                 batch.clear();
             }
         }
         if !batch.is_empty() {
             self.write_batch_with_retry(&batch, table, batch_retries)?;
-            progress.inc(batch.len().try_into()?);
+            progress.inc(batch.len().try_into().unwrap());
         }
         progress.finish();
         return Ok(());

@@ -1,9 +1,12 @@
+use std::sync::atomic::Ordering;
+
 use anyhow::Context;
 use databases::traits::{DBReader, DBWriter};
 
 pub mod args;
 pub mod channel;
 pub mod databases;
+pub mod error;
 pub mod progress;
 pub mod uri;
 
@@ -33,13 +36,18 @@ fn process_table(
     tracker: progress::TableMigrationProgress,
     table: &str,
 ) -> anyhow::Result<()> {
+    let stopped = std::sync::atomic::AtomicBool::new(false);
     return std::thread::scope(|s| {
         let (sender, reciever) = channel::create_channel(args.queue_size);
         let mut handles = Vec::new();
         handles.push(s.spawn(|| {
-            return reader
-                .start_reading(sender, table, tracker.reader)
-                .context("Reader failed");
+            return match reader.start_reading(sender, table, tracker.reader, &stopped) {
+                Ok(()) | Err(error::Error::Stopped) => Ok(()),
+                Err(error::Error::Other(e)) => {
+                    stopped.store(true, Ordering::Relaxed);
+                    Err(e.context("Reader failed"))
+                }
+            };
         }));
         if args.writer_workers > 1 {
             handles.push(s.spawn({
@@ -52,41 +60,45 @@ fn process_table(
                         ))
                     }
                 };
+                let stopped = &stopped;
                 move || {
-                    return new_writer
-                        .start_writing(
-                            reciever.clone(),
-                            table,
-                            args.batch_write_size,
-                            args.batch_write_retries,
-                            tracker.writer.clone(),
-                        )
-                        .context("Writer failed");
+                    return match new_writer.start_writing(
+                        reciever.clone(),
+                        table,
+                        args.batch_write_size,
+                        args.batch_write_retries,
+                        tracker.writer.clone(),
+                        stopped,
+                    ) {
+                        Ok(()) | Err(error::Error::Stopped) => Ok(()),
+                        Err(error::Error::Other(e)) => {
+                            stopped.store(true, Ordering::Relaxed);
+                            Err(e.context("Writer failed"))
+                        }
+                    };
                 }
             }));
         } else {
             handles.push(s.spawn(|| {
-                return writer
-                    .start_writing(
-                        reciever,
-                        table,
-                        args.batch_write_size,
-                        args.batch_write_retries,
-                        tracker.writer,
-                    )
-                    .context("Writer failed");
+                return match writer.start_writing(
+                    reciever,
+                    table,
+                    args.batch_write_size,
+                    args.batch_write_retries,
+                    tracker.writer,
+                    &stopped,
+                ) {
+                    Ok(()) | Err(error::Error::Stopped) => Ok(()),
+                    Err(error::Error::Other(e)) => {
+                        stopped.store(true, Ordering::Relaxed);
+                        Err(e.context("Writer failed"))
+                    }
+                };
             }));
         }
-        let mut got_error = false;
+        // Only first (original) error expected
         for handle in handles {
-            let _ = handle.join().unwrap().map_err(|err| {
-                tracing::error!("{}", err);
-                got_error = true;
-                return err;
-            });
-        }
-        if got_error {
-            return Err(anyhow::anyhow!("Stopped because of the error"));
+            handle.join().unwrap()?;
         }
         return Ok(());
     });

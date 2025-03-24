@@ -1,4 +1,7 @@
-use std::str::FromStr;
+use std::{
+    str::FromStr,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use anyhow::Context;
 use indicatif::ProgressBar;
@@ -6,8 +9,11 @@ use rusqlite::{params_from_iter, Connection, OpenFlags};
 
 use crate::{
     channel::Sender,
-    databases::table::{Row, Value},
-    databases::traits::{DBInfoProvider, DBReader, DBWriter},
+    databases::{
+        table::{Row, Value},
+        traits::{DBInfoProvider, DBReader, DBWriter},
+    },
+    error::Error,
 };
 
 use super::table::{Column, Table};
@@ -71,7 +77,8 @@ impl DBReader for SqliteDB {
         sender: Sender,
         table: &str,
         progress: ProgressBar,
-    ) -> anyhow::Result<()> {
+        stopped: &AtomicBool,
+    ) -> Result<(), Error> {
         let columns = self.get_columns(table)?;
         let query = format!("select * from {table}");
         let mut stmt = self
@@ -81,14 +88,17 @@ impl DBReader for SqliteDB {
         let column_count = stmt.column_count();
         let mut rows = stmt.query([]).context("Failed to read rows")?;
         while let Ok(Some(row)) = rows.next() {
+            if stopped.load(Ordering::Relaxed) {
+                return Err(Error::Stopped);
+            }
             let mut result: Row = Vec::with_capacity(column_count);
             for (idx, column) in columns.iter().enumerate() {
-                let raw = row.get_ref(idx)?;
+                let raw = row
+                    .get_ref(idx)
+                    .context("Failed to read data from the row")?;
                 result.push(Value::try_from((column, raw))?);
             }
-            sender
-                .send(result)
-                .context("Failed to send data to queue")?;
+            sender.send(result).map_err(|_| Error::Stopped)?;
             progress.inc(1);
         }
         progress.finish();
