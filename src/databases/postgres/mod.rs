@@ -117,6 +117,7 @@ impl DBWriter for PostgresDB {
                 value.write_postgres_bytes(column.type_(), &mut writer)?;
             }
         }
+        writer.write_all(&(-1_i16).to_be_bytes())?;
         writer
             .finish()
             .context("Failed to finish writing to postgres")?;
