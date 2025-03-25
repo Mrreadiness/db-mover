@@ -88,8 +88,8 @@ impl DBReader for PostgresDB {
 const BINARY_SIGNATURE: &[u8] = b"PGCOPY\n\xFF\r\n\0";
 
 impl DBWriter for PostgresDB {
-    fn opt_clone(&self) -> Option<anyhow::Result<Box<dyn DBWriter>>> {
-        return Some(PostgresDB::new(&self.uri).map(|writer| Box::new(writer) as _));
+    fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
+        return PostgresDB::new(&self.uri).map(|writer| Box::new(writer) as _);
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {

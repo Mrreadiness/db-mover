@@ -24,8 +24,10 @@ pub trait DBReader: Send + DBInfoProvider {
 }
 
 pub trait DBWriter: Send + DBInfoProvider {
-    fn opt_clone(&self) -> Option<anyhow::Result<Box<dyn DBWriter>>> {
-        return None;
+    fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
+        return Err(anyhow::anyhow!(
+            "This type of databases doesn't support mutiple writers"
+        ));
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;

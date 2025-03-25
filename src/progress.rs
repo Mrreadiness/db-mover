@@ -2,8 +2,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle, T
 use std::io;
 use tracing::info;
 
-use crate::args::Args;
-
 /// Terminal Like logger, workaround in case if there is no terminal
 #[derive(Debug)]
 pub struct TermLoggger;
@@ -58,9 +56,9 @@ pub struct TableMigrationProgress {
 }
 
 impl TableMigrationProgress {
-    pub fn new(args: &Args, table: &str, num_rows: Option<u64>) -> Self {
+    pub fn new(table: &str, num_rows: Option<u64>, quiet: bool) -> Self {
         let multibar = MultiProgress::new();
-        if args.quiet {
+        if quiet {
             multibar.set_draw_target(indicatif::ProgressDrawTarget::hidden());
         } else if ProgressBar::no_length().is_hidden() {
             multibar.set_draw_target(indicatif::ProgressDrawTarget::term_like_with_hz(
