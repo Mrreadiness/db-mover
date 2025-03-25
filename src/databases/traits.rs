@@ -27,15 +27,13 @@ pub trait DBWriter: Send + DBInfoProvider {
         table: &str,
         left_reties: usize,
     ) -> anyhow::Result<()> {
-        match self.write_batch(batch, table) {
-            Ok(_) => return Ok(()),
-            Err(err) => {
-                if left_reties == 0 {
-                    return Err(err);
-                }
-                error!("Got error: {err:?}. Retries left: {left_reties}");
-                return self.write_batch_with_retry(batch, table, left_reties - 1);
+        if let Err(err) = self.write_batch(batch, table) {
+            if left_reties == 0 {
+                return Err(err);
             }
+            error!("Got error: {err:?}. Retries left: {left_reties}");
+            return self.write_batch_with_retry(batch, table, left_reties - 1);
         }
+        return Ok(());
     }
 }

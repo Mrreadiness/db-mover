@@ -73,6 +73,7 @@ impl TableMigrator {
             }
             let row = result?;
             sender.send(row).map_err(|_| Error::Stopped)?;
+            tracker.reader.inc(1);
         }
         tracker.reader.finish();
         return Ok(());
@@ -145,5 +146,197 @@ impl TableMigrator {
             }
             return Ok(());
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::databases::table::Table;
+    use crate::databases::traits::{DBInfoProvider, ReaderIterator};
+
+    use super::*;
+    use mockall::{mock, predicate::*};
+    use std::sync::atomic::AtomicBool;
+
+    mock! {
+        RowsIter {}
+
+        impl Iterator for RowsIter {
+            type Item = anyhow::Result<Row>;
+
+            fn next(&mut self) -> Option<<Self as Iterator>::Item>;
+        }
+    }
+
+    mock! {
+        DB {}
+
+        impl DBInfoProvider for DB {
+            fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<Table>;
+        }
+        impl DBReader for DB {
+            fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>>;
+        }
+        impl DBWriter for DB {
+            fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;
+        }
+    }
+    #[test]
+    fn test_reading() {
+        let mut db_mock = MockDB::new();
+        db_mock.expect_read_iter().returning(|_| {
+            let mut rows = MockRowsIter::new();
+            let mut count = 0;
+            rows.expect_next().returning(move || {
+                if count == 5 {
+                    return None;
+                }
+                count += 1;
+                return Some(Ok(Row::default()));
+            });
+            Ok(Box::new(rows))
+        });
+        let (sender, receiver) = channel::create_channel(10);
+        let tracker = TableMigrationProgress::new("test", None, true);
+        let stopped = AtomicBool::new(false);
+
+        let result =
+            TableMigrator::start_reading(Box::new(db_mock), sender, &tracker, "test", &stopped);
+        assert!(matches!(result, Ok(())));
+        assert_eq!(tracker.reader.position(), 5);
+        assert_eq!(receiver.len(), 5);
+    }
+
+    #[test]
+    fn test_reading_stops_on_signal() {
+        let mut db_mock = MockDB::new();
+        db_mock.expect_read_iter().returning(|_| {
+            let mut rows = MockRowsIter::new();
+            rows.expect_next().returning(|| Some(Ok(Row::default())));
+            Ok(Box::new(rows))
+        });
+        let (sender, _receiver) = channel::create_channel(10);
+        let tracker = TableMigrationProgress::new("test", None, true);
+        let stopped = AtomicBool::new(true);
+
+        let result =
+            TableMigrator::start_reading(Box::new(db_mock), sender, &tracker, "test", &stopped);
+        assert!(matches!(result, Err(Error::Stopped)));
+    }
+
+    #[test]
+    fn test_reading_stops_on_dropped_writers() {
+        let mut db_mock = MockDB::new();
+        db_mock.expect_read_iter().returning(|_| {
+            let mut rows = MockRowsIter::new();
+            rows.expect_next().returning(|| Some(Ok(Row::default())));
+            Ok(Box::new(rows))
+        });
+        let (sender, receiver) = channel::create_channel(10);
+        drop(receiver);
+        let tracker = TableMigrationProgress::new("test", None, true);
+        let stopped = AtomicBool::new(true);
+
+        let result =
+            TableMigrator::start_reading(Box::new(db_mock), sender, &tracker, "test", &stopped);
+        assert!(matches!(result, Err(Error::Stopped)));
+    }
+
+    #[test]
+    fn test_writing_one_batch() {
+        let mut db_mock = MockDB::new();
+        let num_rows = 5;
+        let batch_size = 10;
+        db_mock
+            .expect_write_batch()
+            .times(1)
+            .returning(|_, _| Ok(())); // one batch
+        let (sender, receiver) = channel::create_channel(10);
+        let tracker = TableMigrationProgress::new("test", None, true);
+        for _ in 0..num_rows {
+            sender.send(Row::default()).unwrap();
+        }
+        drop(sender);
+        let stopped = AtomicBool::new(false);
+
+        let result = TableMigrator::start_writing(
+            Box::new(db_mock),
+            receiver,
+            &tracker,
+            "test",
+            batch_size,
+            0,
+            &stopped,
+        );
+        assert!(matches!(result, Ok(())));
+    }
+
+    #[test]
+    fn test_writing_multiple_batches() {
+        let mut db_mock = MockDB::new();
+        let num_rows = 5;
+        let batch_size = 1;
+        db_mock
+            .expect_write_batch()
+            .times(5)
+            .returning(|_, _| Ok(())); // one batch
+        let (sender, receiver) = channel::create_channel(10);
+        let tracker = TableMigrationProgress::new("test", None, true);
+        for _ in 0..num_rows {
+            sender.send(Row::default()).unwrap();
+        }
+        drop(sender);
+        let stopped = AtomicBool::new(false);
+
+        let result = TableMigrator::start_writing(
+            Box::new(db_mock),
+            receiver,
+            &tracker,
+            "test",
+            batch_size,
+            0,
+            &stopped,
+        );
+        assert!(matches!(result, Ok(())));
+    }
+
+    #[test]
+    fn test_writing_stops_on_signal() {
+        let db_mock = MockDB::new();
+        let (sender, receiver) = channel::create_channel(10);
+        let tracker = TableMigrationProgress::new("test", None, true);
+        sender.send(Row::default()).unwrap();
+        let stopped = AtomicBool::new(true);
+
+        let result = TableMigrator::start_writing(
+            Box::new(db_mock),
+            receiver,
+            &tracker,
+            "test",
+            10,
+            3,
+            &stopped,
+        );
+        assert!(matches!(result, Err(Error::Stopped)));
+    }
+
+    #[test]
+    fn test_writing_stops_on_dropped_reader() {
+        let db_mock = MockDB::new();
+        let (sender, receiver) = channel::create_channel(10);
+        drop(sender);
+        let tracker = TableMigrationProgress::new("test", None, true);
+        let stopped = AtomicBool::new(true);
+
+        let result = TableMigrator::start_writing(
+            Box::new(db_mock),
+            receiver,
+            &tracker,
+            "test",
+            10,
+            3,
+            &stopped,
+        );
+        assert!(matches!(result, Ok(())));
     }
 }

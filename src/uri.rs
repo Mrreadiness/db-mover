@@ -51,3 +51,26 @@ impl FromStr for URI {
         return Err("Unknown URI format".to_string());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_uri_from_str_sqlite() {
+        let uri = URI::from_str("sqlite://test.db");
+        assert!(matches!(uri, Ok(URI::Sqlite(_))));
+    }
+
+    #[test]
+    fn test_uri_from_str_postgres() {
+        let uri = URI::from_str("postgres://user:pass@localhost/db");
+        assert!(matches!(uri, Ok(URI::Postgres(_))));
+    }
+
+    #[test]
+    fn test_uri_from_str_invalid() {
+        let uri = URI::from_str("invalid://test");
+        assert!(uri.is_err());
+    }
+}
