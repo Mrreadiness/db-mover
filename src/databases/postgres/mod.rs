@@ -1,17 +1,14 @@
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Context;
-use indicatif::ProgressBar;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::{Client, NoTls};
 
-use crate::channel::Sender;
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
-use crate::error::Error;
 
 use super::table::Table;
+use super::traits::ReaderIterator;
 
 mod value;
 
@@ -46,41 +43,49 @@ impl DBInfoProvider for PostgresDB {
     }
 }
 
+struct PostgresRowsIter<'a> {
+    stmt: postgres::Statement,
+    rows: postgres::RowIter<'a>,
+}
+
+impl Iterator for PostgresRowsIter<'_> {
+    type Item = anyhow::Result<Row>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let columns = self.stmt.columns();
+        return match self
+            .rows
+            .next()
+            .context("Error while reading data from postgres")
+        {
+            Ok(Some(row)) => {
+                let mut result: Row = Vec::with_capacity(columns.len());
+                for (idx, column) in columns.iter().enumerate() {
+                    match Value::try_from((column.type_(), &row, idx)) {
+                        Ok(val) => result.push(val),
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
+                Some(Ok(result))
+            }
+            Ok(None) => None,
+            Err(e) => Some(Err(e)),
+        };
+    }
+}
+
 impl DBReader for PostgresDB {
-    fn start_reading(
-        &mut self,
-        sender: Sender,
-        table: &str,
-        progress: ProgressBar,
-        stopped: &AtomicBool,
-    ) -> Result<(), Error> {
+    fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>> {
         let query = format!("select * from {table}");
         let stmt = self
             .client
             .prepare(&query)
             .context("Failed to prepare select statement")?;
-        let columns = stmt.columns();
-        let mut rows = self
+        let rows = self
             .client
             .query_raw(&stmt, &[] as &[&str; 0])
             .context("Failed to get data from postgres source")?;
-
-        while let Some(row) = rows
-            .next()
-            .context("Error while reading data from postgres")?
-        {
-            if stopped.load(Ordering::Relaxed) {
-                return Err(Error::Stopped);
-            }
-            let mut result: Row = Vec::with_capacity(columns.len());
-            for (idx, column) in columns.iter().enumerate() {
-                result.push(Value::try_from((column.type_(), &row, idx))?);
-            }
-            sender.send(result).map_err(|_| Error::Stopped)?;
-            progress.inc(1);
-        }
-        progress.finish();
-        return Ok(());
+        return Ok(Box::new(PostgresRowsIter { stmt, rows }));
     }
 }
 

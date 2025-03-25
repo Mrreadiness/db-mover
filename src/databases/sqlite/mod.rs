@@ -1,22 +1,17 @@
-use std::{
-    str::FromStr,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::str::FromStr;
 
 use anyhow::Context;
-use indicatif::ProgressBar;
 use rusqlite::{params_from_iter, Connection, OpenFlags};
 
-use crate::{
-    channel::Sender,
-    databases::{
-        table::{Row, Value},
-        traits::{DBInfoProvider, DBReader, DBWriter},
-    },
-    error::Error,
+use crate::databases::{
+    table::{Row, Value},
+    traits::{DBInfoProvider, DBReader, DBWriter},
 };
 
-use super::table::{Column, Table};
+use super::{
+    table::{Column, Table},
+    traits::ReaderIterator,
+};
 
 mod value;
 
@@ -71,38 +66,61 @@ impl DBInfoProvider for SqliteDB {
     }
 }
 
+#[ouroboros::self_referencing]
+struct SqliteRowsIter<'a> {
+    columns: Vec<Column>,
+    stmt: rusqlite::Statement<'a>,
+
+    #[borrows(mut stmt)]
+    #[covariant]
+    rows: rusqlite::Rows<'this>,
+}
+
+impl Iterator for SqliteRowsIter<'_> {
+    type Item = anyhow::Result<Row>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.with_mut(
+            |fields| match fields.rows.next().context("Failed to read a row") {
+                Ok(Some(row)) => {
+                    let columns = fields.columns;
+                    let mut result: Row = Vec::with_capacity(columns.len());
+                    for (idx, column) in columns.iter().enumerate() {
+                        match row
+                            .get_ref(idx)
+                            .context("Failed to read data from the row")
+                            .and_then(|raw| Value::try_from((column, raw)))
+                        {
+                            Ok(value) => result.push(value),
+                            Err(e) => return Some(Err(e)),
+                        }
+                    }
+                    return Some(Ok(result));
+                }
+                Ok(None) => return None,
+                Err(e) => return Some(Err(e)),
+            },
+        )
+    }
+}
+
 impl DBReader for SqliteDB {
-    fn start_reading(
-        &mut self,
-        sender: Sender,
-        table: &str,
-        progress: ProgressBar,
-        stopped: &AtomicBool,
-    ) -> Result<(), Error> {
+    fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>> {
         let columns = self.get_columns(table)?;
         let query = format!("select * from {table}");
-        let mut stmt = self
+        let stmt = self
             .connection
             .prepare(&query)
             .context("Failed to create read query")?;
-        let column_count = stmt.column_count();
-        let mut rows = stmt.query([]).context("Failed to read rows")?;
-        while let Ok(Some(row)) = rows.next() {
-            if stopped.load(Ordering::Relaxed) {
-                return Err(Error::Stopped);
-            }
-            let mut result: Row = Vec::with_capacity(column_count);
-            for (idx, column) in columns.iter().enumerate() {
-                let raw = row
-                    .get_ref(idx)
-                    .context("Failed to read data from the row")?;
-                result.push(Value::try_from((column, raw))?);
-            }
-            sender.send(result).map_err(|_| Error::Stopped)?;
-            progress.inc(1);
+        let iterator = SqliteRowsIterTryBuilder {
+            columns,
+            stmt,
+            rows_builder: |stmt| {
+                return stmt.query([]).context("Failed to read rows");
+            },
         }
-        progress.finish();
-        return Ok(());
+        .try_build()?;
+        return Ok(Box::new(iterator));
     }
 }
 

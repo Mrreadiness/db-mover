@@ -17,6 +17,7 @@ tracing = "0.1.41"
 chrono = "0.4.40"
 pretty_assertions = "1.4.1"
 thiserror = "2"
+ouroboros = "0.18.5"
 
 [dev-dependencies]
 criterion = "0.5.1"

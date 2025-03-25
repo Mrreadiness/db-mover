@@ -13,14 +13,30 @@ pub trait DBInfoProvider: Send {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<Table>;
 }
 
+pub type ReaderIterator<'a> = Box<dyn Iterator<Item = anyhow::Result<Row>> + 'a>;
+
 pub trait DBReader: Send + DBInfoProvider {
+    fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>>;
+
     fn start_reading(
         &mut self,
         sender: Sender,
         table: &str,
         progress: ProgressBar,
         stopped: &AtomicBool,
-    ) -> Result<(), Error>;
+    ) -> Result<(), Error> {
+        let iterator = self.read_iter(table)?;
+        for result in iterator {
+            let row = result?;
+            if stopped.load(Ordering::Relaxed) {
+                return Err(Error::Stopped);
+            }
+            sender.send(row).map_err(|_| Error::Stopped)?;
+            progress.inc(1);
+        }
+        progress.finish();
+        return Ok(());
+    }
 }
 
 pub trait DBWriter: Send + DBInfoProvider {
