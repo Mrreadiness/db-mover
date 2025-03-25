@@ -288,10 +288,10 @@ mod tests {
         let mut db_mock = MockDB::new();
         let num_rows = 5;
         let batch_size = 10;
-        db_mock
-            .expect_write_batch()
-            .times(1)
-            .returning(|_, _| Ok(())); // one batch
+        db_mock.expect_write_batch().times(1).returning(|rows, _| {
+            assert_eq!(rows.len(), 5);
+            Ok(())
+        });
         let (sender, receiver) = channel::create_channel(10);
         let table_info = TableInfo::new("test".to_string(), None);
         let tracker = TableMigrationProgress::new(&table_info, true);
@@ -318,10 +318,11 @@ mod tests {
         let mut db_mock = MockDB::new();
         let num_rows = 5;
         let batch_size = 1;
-        db_mock
-            .expect_write_batch()
-            .times(5)
-            .returning(|_, _| Ok(())); // one batch
+        db_mock.expect_write_batch().times(5).returning(|rows, _| {
+            assert_eq!(rows.len(), 1);
+            Ok(())
+        });
+
         let (sender, receiver) = channel::create_channel(10);
         let table_info = TableInfo::new("test".to_string(), None);
         let tracker = TableMigrationProgress::new(&table_info, true);
@@ -413,7 +414,10 @@ mod tests {
         writer_mock
             .expect_write_batch()
             .times(1)
-            .returning(|_, _| Ok(()));
+            .returning(|rows, _| {
+                assert_eq!(rows.len(), 5);
+                Ok(())
+            });
 
         let settings = TableMigratorSettings::default();
         let migrator = TableMigrator::new(
@@ -425,6 +429,6 @@ mod tests {
         .expect("Failed to create TableMigrator");
 
         let result = migrator.run();
-        assert!(result.is_ok(), "Migration did not complete successfully");
+        assert!(result.is_ok());
     }
 }
