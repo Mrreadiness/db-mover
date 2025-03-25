@@ -7,7 +7,7 @@ use postgres::{Client, NoTls};
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
 
-use super::table::Table;
+use super::table::TableInfo;
 use super::traits::ReaderIterator;
 
 mod value;
@@ -28,7 +28,7 @@ impl PostgresDB {
 }
 
 impl DBInfoProvider for PostgresDB {
-    fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<Table> {
+    fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut size = None;
         if !no_count {
             let count_query = format!("select count(1) from {table}");
@@ -39,7 +39,7 @@ impl DBInfoProvider for PostgresDB {
                     .try_into()?,
             );
         }
-        return Ok(Table::new(table.to_string(), size));
+        return Ok(TableInfo::new(table.to_string(), size));
     }
 }
 

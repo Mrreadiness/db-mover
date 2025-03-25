@@ -1,9 +1,9 @@
 use tracing::error;
 
-use super::table::{Row, Table};
+use super::table::{Row, TableInfo};
 
 pub trait DBInfoProvider: Send {
-    fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<Table>;
+    fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo>;
 }
 
 pub type ReaderIterator<'a> = Box<dyn Iterator<Item = anyhow::Result<Row>> + 'a>;

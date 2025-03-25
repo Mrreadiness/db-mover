@@ -57,12 +57,12 @@ pub struct Column {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Table {
+pub struct TableInfo {
     pub name: String,
     pub num_rows: Option<u64>,
 }
 
-impl Table {
+impl TableInfo {
     pub fn new(name: String, num_rows: Option<u64>) -> Self {
         return Self { name, num_rows };
     }

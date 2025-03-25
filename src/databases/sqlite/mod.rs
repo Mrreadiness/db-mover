@@ -9,7 +9,7 @@ use crate::databases::{
 };
 
 use super::{
-    table::{Column, Table},
+    table::{Column, TableInfo},
     traits::ReaderIterator,
 };
 
@@ -52,7 +52,7 @@ impl SqliteDB {
 }
 
 impl DBInfoProvider for SqliteDB {
-    fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<Table> {
+    fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut size = None;
         if !no_count {
             let query = format!("select count(1) from {table}");
@@ -62,7 +62,7 @@ impl DBInfoProvider for SqliteDB {
                     .into(),
             );
         }
-        return Ok(Table::new(table.to_string(), size));
+        return Ok(TableInfo::new(table.to_string(), size));
     }
 }
 

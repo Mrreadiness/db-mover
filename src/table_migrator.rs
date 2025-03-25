@@ -13,6 +13,29 @@ use crate::{
     progress::TableMigrationProgress,
 };
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableMigratorSettings {
+    queue_size: usize,
+    quiet: bool,
+    no_count: bool,
+    writer_workers: usize,
+    batch_write_size: usize,
+    batch_write_retries: usize,
+}
+
+impl From<&Args> for TableMigratorSettings {
+    fn from(args: &Args) -> Self {
+        return Self {
+            queue_size: args.queue_size,
+            quiet: args.quiet,
+            no_count: args.no_count,
+            writer_workers: args.writer_workers,
+            batch_write_size: args.batch_write_size,
+            batch_write_retries: args.batch_write_retries,
+        };
+    }
+}
+
 pub struct TableMigrator {
     reader: Box<dyn DBReader>,
     writers: Vec<Box<dyn DBWriter>>,
@@ -20,17 +43,19 @@ pub struct TableMigrator {
     table: String,
     sender: channel::Sender,
     reciever: channel::Reciever,
-    batch_write_size: usize,
-    batch_write_retries: usize,
     stopped: std::sync::atomic::AtomicBool,
+    settings: TableMigratorSettings,
 }
 
 impl TableMigrator {
-    pub fn new(args: &Args, table: String) -> anyhow::Result<TableMigrator> {
-        let mut reader = args.input.create_reader()?;
-        let mut writer = args.output.create_writer()?;
+    pub fn new(
+        mut reader: Box<dyn DBReader>,
+        mut writer: Box<dyn DBWriter>,
+        table: String,
+        settings: TableMigratorSettings,
+    ) -> anyhow::Result<TableMigrator> {
         let table_info = reader
-            .get_table_info(&table, args.no_count)
+            .get_table_info(&table, settings.no_count)
             .context("Unable to get information about source table")?;
         let writer_table_info = writer
             .get_table_info(&table, false)
@@ -39,24 +64,23 @@ impl TableMigrator {
             return Err(anyhow::anyhow!("Destination table should be empty"));
         }
         let mut writers = Vec::new();
-        if args.writer_workers > 1 {
-            for _ in 0..args.writer_workers {
+        if settings.writer_workers > 1 {
+            for _ in 0..settings.writer_workers {
                 writers.push(writer.opt_clone()?);
             }
         } else {
             writers.push(writer);
         }
-        let (sender, reciever) = channel::create_channel(args.queue_size);
+        let (sender, reciever) = channel::create_channel(settings.queue_size);
         return Ok(TableMigrator {
             reader,
             writers,
-            tracker: TableMigrationProgress::new(&table, table_info.num_rows, args.quiet),
+            tracker: TableMigrationProgress::new(&table_info, settings.quiet),
             table,
             sender,
             reciever,
-            batch_write_size: args.batch_write_size,
-            batch_write_retries: args.batch_write_retries,
             stopped: std::sync::atomic::AtomicBool::new(false),
+            settings,
         });
     }
     fn start_reading(
@@ -134,8 +158,8 @@ impl TableMigrator {
                         self.reciever.clone(),
                         &self.tracker,
                         &self.table,
-                        self.batch_write_size,
-                        self.batch_write_retries,
+                        self.settings.batch_write_size,
+                        self.settings.batch_write_retries,
                         &self.stopped,
                     ));
                 }));
@@ -151,7 +175,7 @@ impl TableMigrator {
 
 #[cfg(test)]
 mod tests {
-    use crate::databases::table::Table;
+    use crate::databases::table::TableInfo;
     use crate::databases::traits::{DBInfoProvider, ReaderIterator};
 
     use super::*;
@@ -172,7 +196,7 @@ mod tests {
         DB {}
 
         impl DBInfoProvider for DB {
-            fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<Table>;
+            fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo>;
         }
         impl DBReader for DB {
             fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>>;
@@ -181,6 +205,20 @@ mod tests {
             fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;
         }
     }
+
+    impl Default for TableMigratorSettings {
+        fn default() -> Self {
+            Self {
+                queue_size: 10,
+                quiet: true,
+                no_count: false,
+                writer_workers: 1,
+                batch_write_size: 10,
+                batch_write_retries: 0,
+            }
+        }
+    }
+
     #[test]
     fn test_reading() {
         let mut db_mock = MockDB::new();
@@ -197,7 +235,8 @@ mod tests {
             Ok(Box::new(rows))
         });
         let (sender, receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new("test", None, true);
+        let table_info = TableInfo::new("test".to_string(), None);
+        let tracker = TableMigrationProgress::new(&table_info, true);
         let stopped = AtomicBool::new(false);
 
         let result =
@@ -216,7 +255,8 @@ mod tests {
             Ok(Box::new(rows))
         });
         let (sender, _receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new("test", None, true);
+        let table_info = TableInfo::new("test".to_string(), None);
+        let tracker = TableMigrationProgress::new(&table_info, true);
         let stopped = AtomicBool::new(true);
 
         let result =
@@ -234,7 +274,8 @@ mod tests {
         });
         let (sender, receiver) = channel::create_channel(10);
         drop(receiver);
-        let tracker = TableMigrationProgress::new("test", None, true);
+        let table_info = TableInfo::new("test".to_string(), None);
+        let tracker = TableMigrationProgress::new(&table_info, true);
         let stopped = AtomicBool::new(true);
 
         let result =
@@ -252,7 +293,8 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(())); // one batch
         let (sender, receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new("test", None, true);
+        let table_info = TableInfo::new("test".to_string(), None);
+        let tracker = TableMigrationProgress::new(&table_info, true);
         for _ in 0..num_rows {
             sender.send(Row::default()).unwrap();
         }
@@ -281,7 +323,8 @@ mod tests {
             .times(5)
             .returning(|_, _| Ok(())); // one batch
         let (sender, receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new("test", None, true);
+        let table_info = TableInfo::new("test".to_string(), None);
+        let tracker = TableMigrationProgress::new(&table_info, true);
         for _ in 0..num_rows {
             sender.send(Row::default()).unwrap();
         }
@@ -304,7 +347,8 @@ mod tests {
     fn test_writing_stops_on_signal() {
         let db_mock = MockDB::new();
         let (sender, receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new("test", None, true);
+        let table_info = TableInfo::new("test".to_string(), None);
+        let tracker = TableMigrationProgress::new(&table_info, true);
         sender.send(Row::default()).unwrap();
         let stopped = AtomicBool::new(true);
 
@@ -325,7 +369,8 @@ mod tests {
         let db_mock = MockDB::new();
         let (sender, receiver) = channel::create_channel(10);
         drop(sender);
-        let tracker = TableMigrationProgress::new("test", None, true);
+        let table_info = TableInfo::new("test".to_string(), None);
+        let tracker = TableMigrationProgress::new(&table_info, true);
         let stopped = AtomicBool::new(true);
 
         let result = TableMigrator::start_writing(
@@ -338,5 +383,48 @@ mod tests {
             &stopped,
         );
         assert!(matches!(result, Ok(())));
+    }
+    #[test]
+    fn test_run_success() {
+        let mut reader_mock = MockDB::new();
+        let mut writer_mock = MockDB::new();
+
+        reader_mock
+            .expect_get_table_info()
+            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(5))));
+
+        writer_mock
+            .expect_get_table_info()
+            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(0))));
+
+        reader_mock.expect_read_iter().returning(|_| {
+            let mut rows = MockRowsIter::new();
+            let mut count = 0;
+            rows.expect_next().returning(move || {
+                if count == 5 {
+                    return None;
+                }
+                count += 1;
+                Some(Ok(Row::default()))
+            });
+            Ok(Box::new(rows))
+        });
+
+        writer_mock
+            .expect_write_batch()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let settings = TableMigratorSettings::default();
+        let migrator = TableMigrator::new(
+            Box::new(reader_mock),
+            Box::new(writer_mock),
+            "test".to_string(),
+            settings,
+        )
+        .expect("Failed to create TableMigrator");
+
+        let result = migrator.run();
+        assert!(result.is_ok(), "Migration did not complete successfully");
     }
 }
