@@ -385,6 +385,7 @@ mod tests {
         );
         assert!(matches!(result, Ok(())));
     }
+
     #[test]
     fn test_run_success() {
         let mut reader_mock = MockDB::new();
@@ -430,5 +431,90 @@ mod tests {
 
         let result = migrator.run();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_reader_error() {
+        let mut reader_mock = MockDB::new();
+        let mut writer_mock = MockDB::new();
+
+        reader_mock
+            .expect_get_table_info()
+            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(5))));
+
+        writer_mock
+            .expect_get_table_info()
+            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(0))));
+
+        reader_mock.expect_read_iter().returning(|_| {
+            let mut rows = MockRowsIter::new();
+            rows.expect_next()
+                .returning(move || Some(Err(anyhow::anyhow!("Test error"))));
+            Ok(Box::new(rows))
+        });
+
+        let settings = TableMigratorSettings::default();
+        let migrator = TableMigrator::new(
+            Box::new(reader_mock),
+            Box::new(writer_mock),
+            "test".to_string(),
+            settings,
+        )
+        .expect("Failed to create TableMigrator");
+
+        let result = migrator.run();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+
+        let root_cause = error.root_cause();
+        assert_eq!(format!("{}", root_cause), "Test error");
+    }
+
+    #[test]
+    fn test_run_writer_error() {
+        let mut reader_mock = MockDB::new();
+        let mut writer_mock = MockDB::new();
+
+        reader_mock
+            .expect_get_table_info()
+            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(5))));
+
+        writer_mock
+            .expect_get_table_info()
+            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(0))));
+
+        reader_mock.expect_read_iter().returning(|_| {
+            let mut rows = MockRowsIter::new();
+            let mut count = 0;
+            rows.expect_next().returning(move || {
+                if count == 5 {
+                    return None;
+                }
+                count += 1;
+                Some(Ok(Row::default()))
+            });
+            Ok(Box::new(rows))
+        });
+
+        writer_mock
+            .expect_write_batch()
+            .times(1)
+            .returning(|_, _| Err(anyhow::anyhow!("Test error")));
+
+        let settings = TableMigratorSettings::default();
+        let migrator = TableMigrator::new(
+            Box::new(reader_mock),
+            Box::new(writer_mock),
+            "test".to_string(),
+            settings,
+        )
+        .expect("Failed to create TableMigrator");
+
+        let result = migrator.run();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+
+        let root_cause = error.root_cause();
+        assert_eq!(format!("{}", root_cause), "Test error");
     }
 }
