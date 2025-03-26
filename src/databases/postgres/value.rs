@@ -21,28 +21,27 @@ impl TryFrom<&Type> for ColumnType {
     }
 }
 
-impl TryFrom<(&Type, &postgres::Row, usize)> for Value {
+impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
     type Error = anyhow::Error;
 
-    fn try_from(value: (&Type, &postgres::Row, usize)) -> Result<Self, Self::Error> {
+    fn try_from(value: (ColumnType, &postgres::Row, usize)) -> Result<Self, Self::Error> {
         let (column_type, row, idx) = value;
         let value = match column_type {
-            &Type::INT8 => row
+            ColumnType::I64 => row
                 .get::<_, Option<i64>>(idx)
                 .map_or(Value::Null, Value::I64),
-            &Type::FLOAT8 => row
+            ColumnType::F64 => row
                 .get::<_, Option<f64>>(idx)
                 .map_or(Value::Null, Value::F64),
-            &Type::VARCHAR | &Type::TEXT | &Type::BPCHAR => row
+            ColumnType::String => row
                 .get::<_, Option<String>>(idx)
                 .map_or(Value::Null, Value::String),
-            &Type::BYTEA => row
+            ColumnType::Bytes => row
                 .get::<_, Option<Vec<u8>>>(idx)
                 .map_or(Value::Null, Value::Bytes),
-            &Type::TIMESTAMP => row
+            ColumnType::Timestamp => row
                 .get::<_, Option<NaiveDateTime>>(idx)
                 .map_or(Value::Null, Value::Timestamp),
-            _ => return Err(anyhow::anyhow!("Unsupported postgres type {column_type}")),
         };
         return Ok(value);
     }

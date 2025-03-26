@@ -1,6 +1,6 @@
 use crate::databases::table::{Column, ColumnType, Value};
 use rusqlite::{
-    types::{FromSql, ValueRef},
+    types::{FromSql, ToSqlOutput, ValueRef},
     ToSql,
 };
 
@@ -24,9 +24,9 @@ impl TryFrom<(&Column, ValueRef<'_>)> for Value {
 }
 
 impl ToSql for Value {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         match self {
-            Value::Null => None::<i32>.to_sql(),
+            Value::Null => Ok(ToSqlOutput::from(rusqlite::types::Null)),
             Value::I64(val) => val.to_sql(),
             Value::F64(val) => val.to_sql(),
             Value::String(val) => val.to_sql(),

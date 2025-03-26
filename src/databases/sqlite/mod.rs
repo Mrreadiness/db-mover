@@ -34,7 +34,7 @@ impl SqliteDB {
     fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<Column>> {
         let mut stmt = self
             .connection
-            .prepare("SELECT name, type, `notnull` FROM pragma_table_info where arg=?")?;
+            .prepare("SELECT name, type, `notnull` FROM pragma_table_info WHERE arg=?")?;
         let mut rows = stmt.query([table])?;
         let mut result = Vec::new();
         while let Ok(Some(row)) = rows.next() {
@@ -55,7 +55,7 @@ impl DBInfoProvider for SqliteDB {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
-            let query = format!("select count(1) from {table}");
+            let query = format!("SELECT count(1) FROM {table}");
             num_rows = Some(
                 self.connection
                     .query_row(&query, [], |row| row.get::<_, u32>(0))
@@ -76,7 +76,7 @@ impl DBInfoProvider for SqliteDB {
 
 #[ouroboros::self_referencing]
 struct SqliteRowsIter<'a> {
-    columns: Vec<Column>,
+    target_format: TableInfo,
     stmt: rusqlite::Statement<'a>,
 
     #[borrows(mut stmt)]
@@ -91,7 +91,7 @@ impl Iterator for SqliteRowsIter<'_> {
         self.with_mut(
             |fields| match fields.rows.next().context("Failed to read a row") {
                 Ok(Some(row)) => {
-                    let columns = fields.columns;
+                    let columns = &fields.target_format.columns;
                     let mut result: Row = Vec::with_capacity(columns.len());
                     for (idx, column) in columns.iter().enumerate() {
                         match row
@@ -113,15 +113,18 @@ impl Iterator for SqliteRowsIter<'_> {
 }
 
 impl DBReader for SqliteDB {
-    fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>> {
-        let columns = self.get_columns(table)?;
-        let query = format!("select * from {table}");
+    fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
+        let query = format!(
+            "SELECT {} FROM {}",
+            target_format.column_names().join(", "),
+            target_format.name
+        );
         let stmt = self
             .connection
             .prepare(&query)
             .context("Failed to create read query")?;
         let iterator = SqliteRowsIterTryBuilder {
-            columns,
+            target_format,
             stmt,
             rows_builder: |stmt| {
                 return stmt.query([]).context("Failed to read rows");
@@ -143,7 +146,7 @@ impl DBWriter for SqliteDB {
             .map(|_| placeholder.as_str())
             .collect::<Vec<_>>()
             .join(", ");
-        let query = format!("insert into {table} values {placeholders}");
+        let query = format!("INSERT INTO {table} VALUES {placeholders}");
         let mut stmt = self
             .connection
             .prepare(&query)

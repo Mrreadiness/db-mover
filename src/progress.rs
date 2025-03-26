@@ -2,8 +2,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle, T
 use std::io;
 use tracing::info;
 
-use crate::databases::table::TableInfo;
-
 /// Terminal Like logger, workaround in case if there is no terminal
 #[derive(Debug)]
 pub struct TermLoggger;
@@ -58,7 +56,7 @@ pub struct TableMigrationProgress {
 }
 
 impl TableMigrationProgress {
-    pub fn new(table_info: &TableInfo, quiet: bool) -> Self {
+    pub fn new(table: &str, num_rows: Option<u64>, quiet: bool) -> Self {
         let multibar = MultiProgress::new();
         if quiet {
             multibar.set_draw_target(indicatif::ProgressDrawTarget::hidden());
@@ -72,17 +70,15 @@ impl TableMigrationProgress {
                 "{msg} [{elapsed_precise}] {bar:40} {percent}% {human_pos}/{human_len} Rows per sec: {per_sec} ETA: {eta}",
             )
             .unwrap();
-        let reader =
-            ProgressBar::with_draw_target(table_info.num_rows, ProgressDrawTarget::stderr())
-                .with_style(style.clone());
+        let reader = ProgressBar::with_draw_target(num_rows, ProgressDrawTarget::stderr())
+            .with_style(style.clone());
         let writer =
-            ProgressBar::with_draw_target(table_info.num_rows, ProgressDrawTarget::stderr())
-                .with_style(style);
+            ProgressBar::with_draw_target(num_rows, ProgressDrawTarget::stderr()).with_style(style);
 
         multibar.add(reader.clone());
         multibar.add(writer.clone());
-        reader.set_message(format!("Reading table {}", table_info.name));
-        writer.set_message(format!("Writing table {}", table_info.name));
+        reader.set_message(format!("Reading table {}", table));
+        writer.set_message(format!("Writing table {}", table));
         return Self {
             reader,
             writer,

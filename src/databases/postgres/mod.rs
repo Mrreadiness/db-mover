@@ -27,7 +27,7 @@ impl PostgresDB {
     }
 
     fn get_num_rows(&mut self, table: &str) -> anyhow::Result<u64> {
-        let count_query = format!("select count(1) from {table}");
+        let count_query = format!("SELECT count(1) FROM {table}");
         return self
             .client
             .query_one(&count_query, &[])?
@@ -57,7 +57,7 @@ impl PostgresDB {
             })
         }
         let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
-        let query = format!("select {} from {}", column_names.join(", "), table);
+        let query = format!("SELECT {} FROM {}", column_names.join(", "), table);
         let stmt = self
             .client
             .prepare(&query)
@@ -102,7 +102,7 @@ impl DBInfoProvider for PostgresDB {
 }
 
 struct PostgresRowsIter<'a> {
-    stmt: postgres::Statement,
+    target_format: TableInfo,
     rows: postgres::RowIter<'a>,
 }
 
@@ -110,16 +110,15 @@ impl Iterator for PostgresRowsIter<'_> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let columns = self.stmt.columns();
         return match self
             .rows
             .next()
             .context("Error while reading data from postgres")
         {
             Ok(Some(row)) => {
-                let mut result: Row = Vec::with_capacity(columns.len());
-                for (idx, column) in columns.iter().enumerate() {
-                    match Value::try_from((column.type_(), &row, idx)) {
+                let mut result: Row = Vec::with_capacity(self.target_format.columns.len());
+                for (idx, column) in self.target_format.columns.iter().enumerate() {
+                    match Value::try_from((column.column_type, &row, idx)) {
                         Ok(val) => result.push(val),
                         Err(e) => return Some(Err(e)),
                     }
@@ -133,8 +132,12 @@ impl Iterator for PostgresRowsIter<'_> {
 }
 
 impl DBReader for PostgresDB {
-    fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>> {
-        let query = format!("select * from {table}");
+    fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
+        let query = format!(
+            "SELECT {} FROM {}",
+            target_format.column_names().join(", "),
+            target_format.name
+        );
         let stmt = self
             .client
             .prepare(&query)
@@ -143,7 +146,10 @@ impl DBReader for PostgresDB {
             .client
             .query_raw(&stmt, &[] as &[&str; 0])
             .context("Failed to get data from postgres source")?;
-        return Ok(Box::new(PostgresRowsIter { stmt, rows }));
+        return Ok(Box::new(PostgresRowsIter {
+            target_format,
+            rows,
+        }));
     }
 }
 
@@ -156,7 +162,7 @@ impl DBWriter for PostgresDB {
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
-        let query = format!("select * from {table}");
+        let query = format!("SELECT * FROM {table}");
         let stmt = self
             .client
             .prepare(&query)

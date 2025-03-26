@@ -13,7 +13,7 @@ pub enum Value {
 
 pub type Row = Vec<Value>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ColumnType {
     String,
     Bytes,
@@ -61,4 +61,10 @@ pub struct TableInfo {
     pub name: String,
     pub num_rows: Option<u64>,
     pub columns: Vec<Column>,
+}
+
+impl TableInfo {
+    pub fn column_names(&self) -> Vec<&str> {
+        return self.columns.iter().map(|c| c.name.as_str()).collect();
+    }
 }

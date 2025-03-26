@@ -6,7 +6,7 @@ use crate::{
     args::Args,
     channel,
     databases::{
-        table::Row,
+        table::{Row, TableInfo},
         traits::{DBReader, DBWriter},
     },
     error::Error,
@@ -40,7 +40,7 @@ pub struct TableMigrator {
     reader: Box<dyn DBReader>,
     writers: Vec<Box<dyn DBWriter>>,
     tracker: TableMigrationProgress,
-    table: String,
+    target_format: TableInfo,
     sender: channel::Sender,
     reciever: channel::Reciever,
     stopped: std::sync::atomic::AtomicBool,
@@ -51,14 +51,14 @@ impl TableMigrator {
     pub fn new(
         mut reader: Box<dyn DBReader>,
         mut writer: Box<dyn DBWriter>,
-        table: String,
+        table: &str,
         settings: TableMigratorSettings,
     ) -> anyhow::Result<TableMigrator> {
-        let table_info = reader
-            .get_table_info(&table, settings.no_count)
+        let reader_table_info = reader
+            .get_table_info(table, settings.no_count)
             .context("Unable to get information about source table")?;
         let writer_table_info = writer
-            .get_table_info(&table, false)
+            .get_table_info(table, false)
             .context("Unable to get information about destination table")?;
         if writer_table_info.num_rows != Some(0) {
             return Err(anyhow::anyhow!("Destination table should be empty"));
@@ -71,12 +71,14 @@ impl TableMigrator {
         } else {
             writers.push(writer);
         }
+        let tracker =
+            TableMigrationProgress::new(table, reader_table_info.num_rows, settings.quiet);
         let (sender, reciever) = channel::create_channel(settings.queue_size);
         return Ok(TableMigrator {
             reader,
             writers,
-            tracker: TableMigrationProgress::new(&table_info, settings.quiet),
-            table,
+            tracker,
+            target_format: writer_table_info,
             sender,
             reciever,
             stopped: std::sync::atomic::AtomicBool::new(false),
@@ -87,10 +89,10 @@ impl TableMigrator {
         mut reader: Box<dyn DBReader>,
         sender: channel::Sender,
         tracker: &TableMigrationProgress,
-        table: &str,
+        target_format: TableInfo,
         stopped: &std::sync::atomic::AtomicBool,
     ) -> Result<(), Error> {
-        let iterator = reader.read_iter(table)?;
+        let iterator = reader.read_iter(target_format)?;
         for result in iterator {
             if stopped.load(Ordering::Relaxed) {
                 return Err(Error::Stopped);
@@ -147,7 +149,7 @@ impl TableMigrator {
                     self.reader,
                     self.sender,
                     &self.tracker,
-                    &self.table,
+                    self.target_format.clone(),
                     &self.stopped,
                 ));
             }));
@@ -157,7 +159,7 @@ impl TableMigrator {
                         writer,
                         self.reciever.clone(),
                         &self.tracker,
-                        &self.table,
+                        &self.target_format.name,
                         self.settings.batch_write_size,
                         self.settings.batch_write_retries,
                         &self.stopped,
@@ -199,7 +201,7 @@ mod tests {
             fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo>;
         }
         impl DBReader for DB {
-            fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>>;
+            fn read_iter<'a>(&'a mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'a>>;
         }
         impl DBWriter for DB {
             fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;
@@ -220,11 +222,12 @@ mod tests {
     }
 
     const NUM_ROWS: u64 = 5;
+    const TABLE_NAME: &str = "test";
 
     impl TableInfo {
         fn default_in() -> Self {
             Self {
-                name: "test".to_string(),
+                name: TABLE_NAME.to_string(),
                 num_rows: None,
                 columns: Vec::new(),
             }
@@ -232,7 +235,7 @@ mod tests {
 
         fn default_out() -> Self {
             Self {
-                name: "test".to_string(),
+                name: TABLE_NAME.to_string(),
                 num_rows: Some(0),
                 columns: Vec::new(),
             }
@@ -255,12 +258,16 @@ mod tests {
             Ok(Box::new(rows))
         });
         let (sender, receiver) = channel::create_channel(10);
-        let table_info = TableInfo::default_in();
-        let tracker = TableMigrationProgress::new(&table_info, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
         let stopped = AtomicBool::new(false);
 
-        let result =
-            TableMigrator::start_reading(Box::new(db_mock), sender, &tracker, "test", &stopped);
+        let result = TableMigrator::start_reading(
+            Box::new(db_mock),
+            sender,
+            &tracker,
+            TableInfo::default_out(),
+            &stopped,
+        );
         assert!(matches!(result, Ok(())));
         assert_eq!(tracker.reader.position(), NUM_ROWS);
         assert_eq!(receiver.len() as u64, NUM_ROWS);
@@ -275,12 +282,16 @@ mod tests {
             Ok(Box::new(rows))
         });
         let (sender, _receiver) = channel::create_channel(10);
-        let table_info = TableInfo::default_in();
-        let tracker = TableMigrationProgress::new(&table_info, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
         let stopped = AtomicBool::new(true);
 
-        let result =
-            TableMigrator::start_reading(Box::new(db_mock), sender, &tracker, "test", &stopped);
+        let result = TableMigrator::start_reading(
+            Box::new(db_mock),
+            sender,
+            &tracker,
+            TableInfo::default_out(),
+            &stopped,
+        );
         assert!(matches!(result, Err(Error::Stopped)));
     }
 
@@ -294,12 +305,16 @@ mod tests {
         });
         let (sender, receiver) = channel::create_channel(10);
         drop(receiver);
-        let table_info = TableInfo::default_in();
-        let tracker = TableMigrationProgress::new(&table_info, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
         let stopped = AtomicBool::new(true);
 
-        let result =
-            TableMigrator::start_reading(Box::new(db_mock), sender, &tracker, "test", &stopped);
+        let result = TableMigrator::start_reading(
+            Box::new(db_mock),
+            sender,
+            &tracker,
+            TableInfo::default_out(),
+            &stopped,
+        );
         assert!(matches!(result, Err(Error::Stopped)));
     }
 
@@ -312,8 +327,7 @@ mod tests {
             Ok(())
         });
         let (sender, receiver) = channel::create_channel(10);
-        let table_info = TableInfo::default_in();
-        let tracker = TableMigrationProgress::new(&table_info, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
         for _ in 0..NUM_ROWS {
             sender.send(Row::default()).unwrap();
         }
@@ -324,7 +338,7 @@ mod tests {
             Box::new(db_mock),
             receiver,
             &tracker,
-            "test",
+            TABLE_NAME,
             batch_size,
             0,
             &stopped,
@@ -345,8 +359,7 @@ mod tests {
             });
 
         let (sender, receiver) = channel::create_channel(10);
-        let table_info = TableInfo::default_in();
-        let tracker = TableMigrationProgress::new(&table_info, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
         for _ in 0..NUM_ROWS {
             sender.send(Row::default()).unwrap();
         }
@@ -357,7 +370,7 @@ mod tests {
             Box::new(db_mock),
             receiver,
             &tracker,
-            "test",
+            TABLE_NAME,
             batch_size,
             0,
             &stopped,
@@ -369,8 +382,7 @@ mod tests {
     fn test_writing_stops_on_signal() {
         let db_mock = MockDB::new();
         let (sender, receiver) = channel::create_channel(10);
-        let table_info = TableInfo::default_in();
-        let tracker = TableMigrationProgress::new(&table_info, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
         sender.send(Row::default()).unwrap();
         let stopped = AtomicBool::new(true);
 
@@ -378,7 +390,7 @@ mod tests {
             Box::new(db_mock),
             receiver,
             &tracker,
-            "test",
+            TABLE_NAME,
             10,
             3,
             &stopped,
@@ -391,15 +403,14 @@ mod tests {
         let db_mock = MockDB::new();
         let (sender, receiver) = channel::create_channel(10);
         drop(sender);
-        let table_info = TableInfo::default_in();
-        let tracker = TableMigrationProgress::new(&table_info, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
         let stopped = AtomicBool::new(true);
 
         let result = TableMigrator::start_writing(
             Box::new(db_mock),
             receiver,
             &tracker,
-            "test",
+            TABLE_NAME,
             10,
             3,
             &stopped,
@@ -445,7 +456,7 @@ mod tests {
         let migrator = TableMigrator::new(
             Box::new(reader_mock),
             Box::new(writer_mock),
-            "test".to_string(),
+            TABLE_NAME,
             settings,
         )
         .expect("Failed to create TableMigrator");
@@ -478,7 +489,7 @@ mod tests {
         let migrator = TableMigrator::new(
             Box::new(reader_mock),
             Box::new(writer_mock),
-            "test".to_string(),
+            TABLE_NAME,
             settings,
         )
         .expect("Failed to create TableMigrator");
@@ -526,7 +537,7 @@ mod tests {
         let migrator = TableMigrator::new(
             Box::new(reader_mock),
             Box::new(writer_mock),
-            "test".to_string(),
+            TABLE_NAME,
             settings,
         )
         .expect("Failed to create TableMigrator");

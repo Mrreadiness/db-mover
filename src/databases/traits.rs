@@ -9,7 +9,7 @@ pub trait DBInfoProvider: Send {
 pub type ReaderIterator<'a> = Box<dyn Iterator<Item = anyhow::Result<Row>> + 'a>;
 
 pub trait DBReader: Send + DBInfoProvider {
-    fn read_iter<'a>(&'a mut self, table: &str) -> anyhow::Result<ReaderIterator<'a>>;
+    fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>>;
 }
 
 pub trait DBWriter: Send + DBInfoProvider {
