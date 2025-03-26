@@ -5,6 +5,7 @@ use std::str::FromStr;
 pub enum Value {
     String(String),
     Bytes(Vec<u8>),
+    I32(i32),
     I64(i64),
     F64(f64),
     Timestamp(NaiveDateTime),
@@ -17,6 +18,7 @@ pub type Row = Vec<Value>;
 pub enum ColumnType {
     String,
     Bytes,
+    I32,
     I64,
     F64,
     Timestamp,
@@ -30,6 +32,7 @@ impl FromStr for ColumnType {
         if foramted.starts_with("varchar")
             | foramted.starts_with("nvarchar")
             | foramted.starts_with("nchar")
+            | foramted.starts_with("char")
         {
             return Ok(ColumnType::String);
         }
@@ -38,9 +41,8 @@ impl FromStr for ColumnType {
             "float" | "real" | "double" | "double precision" | "numeric" | "decimal" => {
                 Ok(ColumnType::F64)
             }
-            "character" | "varchar" | "nvarchar" | "char" | "nchar" | "clob" | "text" => {
-                Ok(ColumnType::String)
-            }
+            "character" | "varchar" | "nvarchar" | "char" | "nchar" | "clob" | "text"
+            | "bpchar" => Ok(ColumnType::String),
 
             "blob" | "bytea" => Ok(ColumnType::Bytes),
             "datetime" | "timestamp" | "timestamptz" => Ok(ColumnType::Timestamp),

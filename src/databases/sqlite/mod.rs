@@ -97,8 +97,9 @@ impl Iterator for SqliteRowsIter<'_> {
                         match row
                             .get_ref(idx)
                             .context("Failed to read data from the row")
-                            .and_then(|raw| Value::try_from((column, raw)))
-                        {
+                            .and_then(|raw| {
+                                Value::try_from((column, raw)).context("Failed to parse input data")
+                            }) {
                             Ok(value) => result.push(value),
                             Err(e) => return Some(Err(e)),
                         }

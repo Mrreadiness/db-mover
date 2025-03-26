@@ -11,6 +11,7 @@ impl TryFrom<&Type> for ColumnType {
     fn try_from(value: &Type) -> Result<Self, Self::Error> {
         let column_type = match value {
             &Type::INT8 => ColumnType::I64,
+            &Type::INT4 => ColumnType::I32,
             &Type::FLOAT8 => ColumnType::F64,
             &Type::VARCHAR | &Type::TEXT | &Type::BPCHAR => ColumnType::String,
             &Type::BYTEA => ColumnType::Bytes,
@@ -30,6 +31,9 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::I64 => row
                 .get::<_, Option<i64>>(idx)
                 .map_or(Value::Null, Value::I64),
+            ColumnType::I32 => row
+                .get::<_, Option<i32>>(idx)
+                .map_or(Value::Null, Value::I32),
             ColumnType::F64 => row
                 .get::<_, Option<f64>>(idx)
                 .map_or(Value::Null, Value::F64),
@@ -65,8 +69,7 @@ impl Value {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::INT4, &Value::I64(num)) => {
-                let num = i32::try_from(num)?;
+            (&Type::INT4, &Value::I32(num)) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
