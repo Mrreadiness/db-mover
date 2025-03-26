@@ -5,8 +5,9 @@ use std::str::FromStr;
 pub enum Value {
     String(String),
     Bytes(Vec<u8>),
-    I32(i32),
     I64(i64),
+    I32(i32),
+    I16(i16),
     F64(f64),
     Timestamp(NaiveDateTime),
     Null,
@@ -18,8 +19,9 @@ pub type Row = Vec<Value>;
 pub enum ColumnType {
     String,
     Bytes,
-    I32,
     I64,
+    I32,
+    I16,
     F64,
     Timestamp,
 }

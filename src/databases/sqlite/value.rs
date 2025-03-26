@@ -15,6 +15,7 @@ impl TryFrom<(&Column, ValueRef<'_>)> for Value {
         let parsed = match column.column_type {
             ColumnType::I64 => Value::I64(FromSql::column_result(val)?),
             ColumnType::I32 => Value::I32(FromSql::column_result(val)?),
+            ColumnType::I16 => Value::I16(FromSql::column_result(val)?),
             ColumnType::F64 => Value::F64(FromSql::column_result(val)?),
             ColumnType::String => Value::String(FromSql::column_result(val)?),
             ColumnType::Bytes => Value::Bytes(FromSql::column_result(val)?),
@@ -30,6 +31,7 @@ impl ToSql for Value {
             Value::Null => Ok(ToSqlOutput::from(rusqlite::types::Null)),
             Value::I64(val) => val.to_sql(),
             Value::I32(val) => val.to_sql(),
+            Value::I16(val) => val.to_sql(),
             Value::F64(val) => val.to_sql(),
             Value::String(val) => val.to_sql(),
             Value::Bytes(val) => val.to_sql(),
