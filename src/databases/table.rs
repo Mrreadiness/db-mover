@@ -44,7 +44,7 @@ impl FromStr for ColumnType {
 
             "blob" | "bytea" => Ok(ColumnType::Bytes),
             "datetime" | "timestamp" | "timestamptz" => Ok(ColumnType::Timestamp),
-            _ => Err(anyhow::anyhow!("Unknown Column Type format")),
+            _ => Err(anyhow::anyhow!("Unknown column type {s}")),
         };
     }
 }
@@ -60,10 +60,5 @@ pub struct Column {
 pub struct TableInfo {
     pub name: String,
     pub num_rows: Option<u64>,
-}
-
-impl TableInfo {
-    pub fn new(name: String, num_rows: Option<u64>) -> Self {
-        return Self { name, num_rows };
-    }
+    pub columns: Vec<Column>,
 }

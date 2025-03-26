@@ -219,6 +219,26 @@ mod tests {
         }
     }
 
+    const NUM_ROWS: u64 = 5;
+
+    impl TableInfo {
+        fn default_in() -> Self {
+            Self {
+                name: "test".to_string(),
+                num_rows: None,
+                columns: Vec::new(),
+            }
+        }
+
+        fn default_out() -> Self {
+            Self {
+                name: "test".to_string(),
+                num_rows: Some(0),
+                columns: Vec::new(),
+            }
+        }
+    }
+
     #[test]
     fn test_reading() {
         let mut db_mock = MockDB::new();
@@ -226,7 +246,7 @@ mod tests {
             let mut rows = MockRowsIter::new();
             let mut count = 0;
             rows.expect_next().returning(move || {
-                if count == 5 {
+                if count == NUM_ROWS {
                     return None;
                 }
                 count += 1;
@@ -235,15 +255,15 @@ mod tests {
             Ok(Box::new(rows))
         });
         let (sender, receiver) = channel::create_channel(10);
-        let table_info = TableInfo::new("test".to_string(), None);
+        let table_info = TableInfo::default_in();
         let tracker = TableMigrationProgress::new(&table_info, true);
         let stopped = AtomicBool::new(false);
 
         let result =
             TableMigrator::start_reading(Box::new(db_mock), sender, &tracker, "test", &stopped);
         assert!(matches!(result, Ok(())));
-        assert_eq!(tracker.reader.position(), 5);
-        assert_eq!(receiver.len(), 5);
+        assert_eq!(tracker.reader.position(), NUM_ROWS);
+        assert_eq!(receiver.len() as u64, NUM_ROWS);
     }
 
     #[test]
@@ -255,7 +275,7 @@ mod tests {
             Ok(Box::new(rows))
         });
         let (sender, _receiver) = channel::create_channel(10);
-        let table_info = TableInfo::new("test".to_string(), None);
+        let table_info = TableInfo::default_in();
         let tracker = TableMigrationProgress::new(&table_info, true);
         let stopped = AtomicBool::new(true);
 
@@ -274,7 +294,7 @@ mod tests {
         });
         let (sender, receiver) = channel::create_channel(10);
         drop(receiver);
-        let table_info = TableInfo::new("test".to_string(), None);
+        let table_info = TableInfo::default_in();
         let tracker = TableMigrationProgress::new(&table_info, true);
         let stopped = AtomicBool::new(true);
 
@@ -286,16 +306,15 @@ mod tests {
     #[test]
     fn test_writing_one_batch() {
         let mut db_mock = MockDB::new();
-        let num_rows = 5;
         let batch_size = 10;
         db_mock.expect_write_batch().times(1).returning(|rows, _| {
-            assert_eq!(rows.len(), 5);
+            assert_eq!(rows.len() as u64, NUM_ROWS);
             Ok(())
         });
         let (sender, receiver) = channel::create_channel(10);
-        let table_info = TableInfo::new("test".to_string(), None);
+        let table_info = TableInfo::default_in();
         let tracker = TableMigrationProgress::new(&table_info, true);
-        for _ in 0..num_rows {
+        for _ in 0..NUM_ROWS {
             sender.send(Row::default()).unwrap();
         }
         drop(sender);
@@ -316,17 +335,19 @@ mod tests {
     #[test]
     fn test_writing_multiple_batches() {
         let mut db_mock = MockDB::new();
-        let num_rows = 5;
         let batch_size = 1;
-        db_mock.expect_write_batch().times(5).returning(|rows, _| {
-            assert_eq!(rows.len(), 1);
-            Ok(())
-        });
+        db_mock
+            .expect_write_batch()
+            .times(NUM_ROWS as usize)
+            .returning(|rows, _| {
+                assert_eq!(rows.len(), 1);
+                Ok(())
+            });
 
         let (sender, receiver) = channel::create_channel(10);
-        let table_info = TableInfo::new("test".to_string(), None);
+        let table_info = TableInfo::default_in();
         let tracker = TableMigrationProgress::new(&table_info, true);
-        for _ in 0..num_rows {
+        for _ in 0..NUM_ROWS {
             sender.send(Row::default()).unwrap();
         }
         drop(sender);
@@ -348,7 +369,7 @@ mod tests {
     fn test_writing_stops_on_signal() {
         let db_mock = MockDB::new();
         let (sender, receiver) = channel::create_channel(10);
-        let table_info = TableInfo::new("test".to_string(), None);
+        let table_info = TableInfo::default_in();
         let tracker = TableMigrationProgress::new(&table_info, true);
         sender.send(Row::default()).unwrap();
         let stopped = AtomicBool::new(true);
@@ -370,7 +391,7 @@ mod tests {
         let db_mock = MockDB::new();
         let (sender, receiver) = channel::create_channel(10);
         drop(sender);
-        let table_info = TableInfo::new("test".to_string(), None);
+        let table_info = TableInfo::default_in();
         let tracker = TableMigrationProgress::new(&table_info, true);
         let stopped = AtomicBool::new(true);
 
@@ -393,17 +414,17 @@ mod tests {
 
         reader_mock
             .expect_get_table_info()
-            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(5))));
+            .returning(|_, _| Ok(TableInfo::default_in()));
 
         writer_mock
             .expect_get_table_info()
-            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(0))));
+            .returning(|_, _| Ok(TableInfo::default_out()));
 
         reader_mock.expect_read_iter().returning(|_| {
             let mut rows = MockRowsIter::new();
             let mut count = 0;
             rows.expect_next().returning(move || {
-                if count == 5 {
+                if count == NUM_ROWS {
                     return None;
                 }
                 count += 1;
@@ -416,7 +437,7 @@ mod tests {
             .expect_write_batch()
             .times(1)
             .returning(|rows, _| {
-                assert_eq!(rows.len(), 5);
+                assert_eq!(rows.len() as u64, NUM_ROWS);
                 Ok(())
             });
 
@@ -440,11 +461,11 @@ mod tests {
 
         reader_mock
             .expect_get_table_info()
-            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(5))));
+            .returning(|_, _| Ok(TableInfo::default_in()));
 
         writer_mock
             .expect_get_table_info()
-            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(0))));
+            .returning(|_, _| Ok(TableInfo::default_out()));
 
         reader_mock.expect_read_iter().returning(|_| {
             let mut rows = MockRowsIter::new();
@@ -477,17 +498,17 @@ mod tests {
 
         reader_mock
             .expect_get_table_info()
-            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(5))));
+            .returning(|_, _| Ok(TableInfo::default_in()));
 
         writer_mock
             .expect_get_table_info()
-            .returning(|_, _| Ok(TableInfo::new("test".to_string(), Some(0))));
+            .returning(|_, _| Ok(TableInfo::default_out()));
 
         reader_mock.expect_read_iter().returning(|_| {
             let mut rows = MockRowsIter::new();
             let mut count = 0;
             rows.expect_next().returning(move || {
-                if count == 5 {
+                if count == NUM_ROWS {
                     return None;
                 }
                 count += 1;

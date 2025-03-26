@@ -53,16 +53,24 @@ impl SqliteDB {
 
 impl DBInfoProvider for SqliteDB {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
-        let mut size = None;
+        let mut num_rows = None;
         if !no_count {
             let query = format!("select count(1) from {table}");
-            size = Some(
+            num_rows = Some(
                 self.connection
-                    .query_row(&query, [], |row| row.get::<_, u32>(0))?
+                    .query_row(&query, [], |row| row.get::<_, u32>(0))
+                    .context("Failed to get number of rows in the table")?
                     .into(),
             );
         }
-        return Ok(TableInfo::new(table.to_string(), size));
+        let columns = self
+            .get_columns(table)
+            .context("Failed to get info about table columns")?;
+        return Ok(TableInfo {
+            name: table.to_string(),
+            num_rows,
+            columns,
+        });
     }
 }
 

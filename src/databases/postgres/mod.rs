@@ -7,7 +7,7 @@ use postgres::{Client, NoTls};
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
 
-use super::table::TableInfo;
+use super::table::{Column, ColumnType, TableInfo};
 use super::traits::ReaderIterator;
 
 mod value;
@@ -25,21 +25,79 @@ impl PostgresDB {
             uri: uri.to_string(),
         });
     }
+
+    fn get_num_rows(&mut self, table: &str) -> anyhow::Result<u64> {
+        let count_query = format!("select count(1) from {table}");
+        return self
+            .client
+            .query_one(&count_query, &[])?
+            .get::<_, i64>(0)
+            .try_into()
+            .context("Failed to convert i64 to u64");
+    }
+
+    fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<Column>> {
+        let mut columns = Vec::new();
+        let rows = self
+            .client
+            .query(
+                "SELECT column_name, is_nullable
+            FROM information_schema.columns 
+            WHERE table_name = $1 
+            ORDER BY ordinal_position",
+                &[&table],
+            )
+            .context("Failed to query information about table")?;
+        for row in rows {
+            let is_nullable: &str = row.get(1);
+            columns.push(Column {
+                name: row.get(0),
+                column_type: ColumnType::I64, // Temp default
+                nullable: is_nullable == "YES",
+            })
+        }
+        let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+        let query = format!("select {} from {}", column_names.join(", "), table);
+        let stmt = self
+            .client
+            .prepare(&query)
+            .context("Failed to prepare select statement")?;
+        assert!(
+            columns.len() == stmt.columns().len(),
+            "Broken invariant. Expected to get {} column infos, got {}",
+            columns.len(),
+            stmt.columns().len()
+        );
+        for (column, column_info) in std::iter::zip(columns.iter_mut(), stmt.columns()) {
+            assert!(
+                column.name == column_info.name(),
+                "Broken invariant. Expected to get {} column, got {}",
+                column.name,
+                column_info.name()
+            );
+            column.column_type = column_info.type_().try_into()?;
+        }
+        return Ok(columns);
+    }
 }
 
 impl DBInfoProvider for PostgresDB {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
-        let mut size = None;
+        let mut num_rows = None;
         if !no_count {
-            let count_query = format!("select count(1) from {table}");
-            size = Some(
-                self.client
-                    .query_one(&count_query, &[])?
-                    .get::<_, i64>(0)
-                    .try_into()?,
+            num_rows = Some(
+                self.get_num_rows(table)
+                    .context("Failed to get number of rows in the table")?,
             );
         }
-        return Ok(TableInfo::new(table.to_string(), size));
+        let columns = self
+            .get_columns(table)
+            .context("Failed to get info about table columns")?;
+        return Ok(TableInfo {
+            name: table.to_string(),
+            num_rows,
+            columns,
+        });
     }
 }
 

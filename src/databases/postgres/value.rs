@@ -3,7 +3,23 @@ use std::io::Write;
 use chrono::NaiveDateTime;
 use postgres::types::Type;
 
-use crate::databases::table::Value;
+use crate::databases::table::{ColumnType, Value};
+
+impl TryFrom<&Type> for ColumnType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Type) -> Result<Self, Self::Error> {
+        let column_type = match value {
+            &Type::INT8 => ColumnType::I64,
+            &Type::FLOAT8 => ColumnType::F64,
+            &Type::VARCHAR | &Type::TEXT | &Type::BPCHAR => ColumnType::String,
+            &Type::BYTEA => ColumnType::Bytes,
+            &Type::TIMESTAMP => ColumnType::Timestamp,
+            _ => return Err(anyhow::anyhow!("Unsupported postgres type {value}")),
+        };
+        return Ok(column_type);
+    }
+}
 
 impl TryFrom<(&Type, &postgres::Row, usize)> for Value {
     type Error = anyhow::Error;
@@ -26,7 +42,7 @@ impl TryFrom<(&Type, &postgres::Row, usize)> for Value {
             &Type::TIMESTAMP => row
                 .get::<_, Option<NaiveDateTime>>(idx)
                 .map_or(Value::Null, Value::Timestamp),
-            _ => return Err(anyhow::anyhow!("Unsupported type")),
+            _ => return Err(anyhow::anyhow!("Unsupported postgres type {column_type}")),
         };
         return Ok(value);
     }
