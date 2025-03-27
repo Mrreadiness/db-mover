@@ -41,6 +41,20 @@ impl TestPostresDatabase {
     }
 }
 
+fn generate_placeholders(blocks: usize) -> String {
+    (0..blocks)
+        .map(|i| {
+            let start = i * 5 + 1;
+            let params = (start..start + 5)
+                .map(|n| format!("${}", n))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({})", params)
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 impl TestableDatabase for TestPostresDatabase {
     fn get_uri(&self) -> db_mover::uri::URI {
         return db_mover::uri::URI::Postgres(self.uri.clone());
@@ -57,16 +71,27 @@ impl TestableDatabase for TestPostresDatabase {
 
     fn fill_test_table(&mut self, name: &str, num_rows: usize) {
         let mut trx = self.client.transaction().unwrap();
-        let query = format!("INSERT INTO {name} VALUES ($1, $2, $3, $4, $5)");
-        let stmt = trx.prepare(&query).unwrap();
 
-        for i in 1..num_rows + 1 {
-            let row: TestRow = Faker.fake();
-            trx.execute(
-                &stmt,
-                &[&(i as i64), &row.real, &row.text, &row.blob, &row.timestamp],
-            )
-            .unwrap();
+        let mut rows = Vec::with_capacity(num_rows);
+        for i in 0..num_rows {
+            let mut row: TestRow = Faker.fake();
+            row.id = i as i64;
+            rows.push(row);
+        }
+        for chunk in rows.chunks(100) {
+            let mut params: Vec<&(dyn postgres::types::ToSql + Sync)> = Vec::new();
+            for row in chunk.iter() {
+                params.push(&row.id);
+                params.push(&row.real);
+                params.push(&row.text);
+                params.push(&row.blob);
+                params.push(&row.timestamp);
+            }
+
+            let placeholders = generate_placeholders(chunk.len());
+            let query = format!("INSERT INTO {name} VALUES {placeholders}");
+
+            trx.execute(&query, params.as_slice()).unwrap();
         }
         trx.commit().unwrap();
     }

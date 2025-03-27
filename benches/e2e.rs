@@ -1,4 +1,4 @@
-use db_mover;
+use db_mover::{self, uri::URI};
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 
@@ -9,13 +9,38 @@ use common::testable_database::TestableDatabase;
 
 const NUM_ROWS: usize = 1_000_000;
 
+struct LazyTestDatabaseFactory<T: TestableDatabase> {
+    internal: T,
+    initialized: bool,
+}
+
+impl<T: TestableDatabase> LazyTestDatabaseFactory<T> {
+    fn new(db: T) -> Self {
+        return Self {
+            internal: db,
+            initialized: false,
+        };
+    }
+
+    fn init(&mut self, num_rows: usize) {
+        if !self.initialized {
+            self.internal.create_test_table("test");
+            self.internal.fill_test_table("test", num_rows);
+            self.initialized = true;
+        }
+    }
+
+    fn get_uri(&self) -> URI {
+        return self.internal.get_uri();
+    }
+}
+
 fn sqlite_to_sqlite(c: &mut Criterion) {
+    let mut input = LazyTestDatabaseFactory::new(common::sqlite::TestSqliteDatabase::new());
     let mut group = c.benchmark_group("sqlite_to_sqlite");
     group.throughput(Throughput::Elements(NUM_ROWS as u64));
     group.bench_with_input(NUM_ROWS.to_string(), &NUM_ROWS, |b, num_rows| {
-        let mut input = common::sqlite::TestSqliteDatabase::new();
-        input.create_test_table("test");
-        input.fill_test_table("test", *num_rows);
+        input.init(*num_rows);
         b.iter(|| {
             let mut output = common::sqlite::TestSqliteDatabase::new();
             output.create_test_table("test");
@@ -27,12 +52,11 @@ fn sqlite_to_sqlite(c: &mut Criterion) {
 }
 
 fn sqlite_to_postgres(c: &mut Criterion) {
+    let mut input = LazyTestDatabaseFactory::new(common::sqlite::TestSqliteDatabase::new());
     let mut group = c.benchmark_group("sqlite_to_postgres");
     group.throughput(Throughput::Elements(NUM_ROWS as u64));
     group.bench_with_input(NUM_ROWS.to_string(), &NUM_ROWS, |b, num_rows| {
-        let mut input = common::sqlite::TestSqliteDatabase::new();
-        input.create_test_table("test");
-        input.fill_test_table("test", *num_rows);
+        input.init(*num_rows);
         b.iter(|| {
             let mut output = common::postgres::TestPostresDatabase::new();
             output.create_test_table("test");
@@ -45,12 +69,11 @@ fn sqlite_to_postgres(c: &mut Criterion) {
 }
 
 fn postgres_to_sqlite(c: &mut Criterion) {
+    let mut input = LazyTestDatabaseFactory::new(common::postgres::TestPostresDatabase::new());
     let mut group = c.benchmark_group("postgres_to_sqlite");
     group.throughput(Throughput::Elements(NUM_ROWS as u64));
     group.bench_with_input(NUM_ROWS.to_string(), &NUM_ROWS, |b, num_rows| {
-        let mut input = common::postgres::TestPostresDatabase::new();
-        input.create_test_table("test");
-        input.fill_test_table("test", *num_rows);
+        input.init(*num_rows);
         b.iter(|| {
             let mut output = common::sqlite::TestSqliteDatabase::new();
             output.create_test_table("test");
@@ -63,12 +86,11 @@ fn postgres_to_sqlite(c: &mut Criterion) {
 }
 
 fn postgres_to_postgres(c: &mut Criterion) {
+    let mut input = LazyTestDatabaseFactory::new(common::postgres::TestPostresDatabase::new());
     let mut group = c.benchmark_group("postgres_to_postgres");
     group.throughput(Throughput::Elements(NUM_ROWS as u64));
     group.bench_with_input(NUM_ROWS.to_string(), &NUM_ROWS, |b, num_rows| {
-        let mut input = common::postgres::TestPostresDatabase::new();
-        input.create_test_table("test");
-        input.fill_test_table("test", *num_rows);
+        input.init(*num_rows);
         b.iter(|| {
             let mut output = common::postgres::TestPostresDatabase::new();
             output.create_test_table("test");
