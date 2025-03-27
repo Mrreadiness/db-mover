@@ -46,14 +46,18 @@ impl TestableDatabase for TestSqliteDatabase {
     }
 
     fn fill_test_table(&mut self, table_name: &str, num_rows: usize) {
-        let query = format!("INSERT INTO {table_name} VALUES (?1, ?2, ?3, ?4, ?5)");
-        let mut stmt = self.conn.prepare(&query).unwrap();
+        let trx = self.conn.transaction().unwrap();
+        {
+            let query = format!("INSERT INTO {table_name} VALUES (?1, ?2, ?3, ?4, ?5)");
+            let mut stmt = trx.prepare(&query).unwrap();
 
-        for i in 1..num_rows + 1 {
-            let row: TestRow = Faker.fake();
-            stmt.execute(params![i, row.real, row.text, row.blob, row.timestamp])
-                .unwrap();
+            for i in 1..num_rows + 1 {
+                let row: TestRow = Faker.fake();
+                stmt.execute(params![i, row.real, row.text, row.blob, row.timestamp])
+                    .unwrap();
+            }
         }
+        trx.commit().unwrap();
     }
 
     fn get_all_rows(&mut self, table_name: &str) -> Vec<TestRow> {

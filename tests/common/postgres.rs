@@ -56,18 +56,19 @@ impl TestableDatabase for TestPostresDatabase {
     }
 
     fn fill_test_table(&mut self, name: &str, num_rows: usize) {
+        let mut trx = self.client.transaction().unwrap();
         let query = format!("INSERT INTO {name} VALUES ($1, $2, $3, $4, $5)");
-        let stmt = self.client.prepare(&query).unwrap();
+        let stmt = trx.prepare(&query).unwrap();
 
         for i in 1..num_rows + 1 {
             let row: TestRow = Faker.fake();
-            self.client
-                .execute(
-                    &stmt,
-                    &[&(i as i64), &row.real, &row.text, &row.blob, &row.timestamp],
-                )
-                .unwrap();
+            trx.execute(
+                &stmt,
+                &[&(i as i64), &row.real, &row.text, &row.blob, &row.timestamp],
+            )
+            .unwrap();
         }
+        trx.commit().unwrap();
     }
 
     fn get_all_rows(&mut self, table_name: &str) -> Vec<TestRow> {
