@@ -138,22 +138,25 @@ impl DBReader for SqliteDB {
 
 impl DBWriter for SqliteDB {
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
-        let placeholder = format!(
-            "({})",
-            batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-        );
-        let placeholders = batch
-            .iter()
-            .map(|_| placeholder.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let query = format!("INSERT INTO {table} VALUES {placeholders}");
-        let mut stmt = self
+        let trx = self
             .connection
-            .prepare(&query)
-            .context("Failed to create write query")?;
-        stmt.execute(params_from_iter(batch.concat().iter()))
-            .context("Failed to write data")?;
+            .transaction()
+            .context("Failed to open transaction")?;
+        {
+            let placeholder = format!(
+                "({})",
+                batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+            );
+            let query = format!("INSERT INTO {table} VALUES {placeholder}");
+            let mut stmt = trx
+                .prepare(&query)
+                .context("Failed to create write query")?;
+            for row in batch {
+                stmt.execute(params_from_iter(row.iter()))
+                    .context("Failed to write data")?;
+            }
+        }
+        trx.commit().context("Failed to commit")?;
         return Ok(());
     }
 }

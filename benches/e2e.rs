@@ -7,7 +7,7 @@ mod common;
 
 use common::testable_database::TestableDatabase;
 
-const NUM_ROWS: usize = 100_000;
+const NUM_ROWS: usize = 1_000_000;
 
 fn sqlite_to_sqlite(c: &mut Criterion) {
     let mut group = c.benchmark_group("sqlite_to_sqlite");

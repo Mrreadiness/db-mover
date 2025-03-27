@@ -12,5 +12,11 @@ fn gen_database_name() -> String {
         's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     ];
     let chars_dist = Choose::new(&chars).unwrap();
-    return chars_dist.sample_iter(&mut rand::rng()).take(10).collect();
+    return format!(
+        "test_{}",
+        chars_dist
+            .sample_iter(&mut rand::rng())
+            .take(10)
+            .collect::<String>()
+    );
 }

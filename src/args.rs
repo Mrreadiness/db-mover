@@ -27,7 +27,7 @@ pub struct Args {
     pub writer_workers: usize,
 
     /// Size of batches used by writer
-    #[arg(long, default_value_t = 1_000)]
+    #[arg(long, default_value_t = 10_000)]
     pub batch_write_size: usize,
 
     /// Number of retries to write a batch
@@ -55,9 +55,9 @@ impl Args {
             input,
             output,
             table: Vec::new(),
-            queue_size: 10_000,
+            queue_size: 100_000,
             writer_workers: 1,
-            batch_write_size: 1_000,
+            batch_write_size: 10_000,
             batch_write_retries: 1,
             quiet: true,
             log_level: Level::INFO,
