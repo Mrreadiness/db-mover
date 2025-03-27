@@ -63,48 +63,42 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
 const POSTGRES_EPOCH_MICROS: i64 = 946684800000000;
 
 impl Value {
-    pub(crate) fn write_postgres_bytes(
-        &self,
-        column_type: &Type,
-        writer: &mut impl Write,
-    ) -> anyhow::Result<()> {
+    pub(crate) fn write_postgres_bytes(&self, writer: &mut impl Write) -> anyhow::Result<()> {
         if self == &Value::Null {
             writer.write_all(&(-1_i32).to_be_bytes())?;
             return Ok(());
         }
-        match (column_type, self) {
-            (&Type::INT8, &Value::I64(num)) => {
+        match self {
+            &Value::I64(num) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::INT4, &Value::I32(num)) => {
+            &Value::I32(num) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::INT2, &Value::I16(num)) => {
+            &Value::I16(num) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::FLOAT8, &Value::F64(num)) => {
+            &Value::F64(num) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::FLOAT4, &Value::F32(num)) => {
+            &Value::F32(num) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
-            (&Type::BYTEA, Value::Bytes(bytes)) => {
+            Value::Bytes(bytes) => {
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
                 writer.write_all(bytes)?;
             }
-            (&Type::VARCHAR, Value::String(string))
-            | (&Type::TEXT, Value::String(string))
-            | (&Type::BPCHAR, Value::String(string)) => {
+            Value::String(string) => {
                 let bytes = string.as_bytes();
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
                 writer.write_all(bytes)?;
             }
-            (&Type::TIMESTAMP, &Value::Timestamp(dt)) => {
+            &Value::Timestamp(dt) => {
                 let val = dt.and_utc().timestamp_micros() - POSTGRES_EPOCH_MICROS;
                 writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
                 writer.write_all(&val.to_be_bytes())?;

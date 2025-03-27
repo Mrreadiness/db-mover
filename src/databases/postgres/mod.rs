@@ -162,13 +162,6 @@ impl DBWriter for PostgresDB {
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
-        let query = format!("SELECT * FROM {table}");
-        let stmt = self
-            .client
-            .prepare(&query)
-            .context("Failed to prepare select statement")?;
-        let columns = stmt.columns();
-
         let query = format!("COPY {table} FROM STDIN WITH BINARY");
         let mut writer = self
             .client
@@ -186,8 +179,8 @@ impl DBWriter for PostgresDB {
         for row in batch {
             // Count of fields
             writer.write_all(&(row.len() as i16).to_be_bytes())?;
-            for (value, column) in std::iter::zip(row, columns) {
-                value.write_postgres_bytes(column.type_(), &mut writer)?;
+            for value in row {
+                value.write_postgres_bytes(&mut writer)?;
             }
         }
         writer.write_all(&(-1_i16).to_be_bytes())?;
