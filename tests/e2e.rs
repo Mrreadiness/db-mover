@@ -138,7 +138,9 @@ fn out_table_is_not_empty(
 #[case("bigint", "9223372036854775800", "9223372036854775800")]
 #[case("integer", "2147483647", "2147483647")]
 #[case("smallint", "32767", "32767")]
-#[case("double precision", "123.12345678", "123.12345678")]
+// Expected side effect of f32 to f64 conversion
+// while writing to the sqlite
+#[case("real", "123.12345", "123.12345123291")]
 #[case("double precision", "123.12345678", "123.12345678")]
 #[case("varchar(10)", "'test'", "test")]
 #[case("char(10)", "'test'", "test")]
@@ -189,7 +191,7 @@ fn sqlite_types_compatability(
 #[case("bigint", "9223372036854775800", "9223372036854775800")]
 #[case("integer", "2147483647", "2147483647")]
 #[case("smallint", "32767", "32767")]
-#[case("double precision", "123.12345678", "123.12345678")]
+#[case("real", "123.12345", "123.12345")]
 #[case("double precision", "123.12345678", "123.12345678")]
 #[case("varchar(10)", "'test'", "test")]
 #[case("char(10)", "'test'", "test")]

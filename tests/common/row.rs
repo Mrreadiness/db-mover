@@ -4,7 +4,7 @@ use fake::Dummy;
 #[derive(PartialEq, Debug, Dummy)]
 pub struct TestRow {
     pub id: i64,
-    pub real: f64,
+    pub real: f32,
     pub text: String,
     pub blob: Vec<u8>,
     pub timestamp: NaiveDateTime,

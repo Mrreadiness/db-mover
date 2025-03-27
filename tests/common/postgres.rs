@@ -48,7 +48,7 @@ impl TestableDatabase for TestPostresDatabase {
 
     fn create_test_table(&mut self, name: &str) {
         let query = format!(
-        "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real DOUBLE PRECISION, text TEXT, blob BYTEA, timestamp TIMESTAMP)"
+        "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real REAL, text TEXT, blob BYTEA, timestamp TIMESTAMP)"
         );
         self.client
             .execute(&query, &[])

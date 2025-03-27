@@ -9,6 +9,7 @@ pub enum Value {
     I32(i32),
     I16(i16),
     F64(f64),
+    F32(f32),
     Timestamp(NaiveDateTime),
     Null,
 }
@@ -23,6 +24,7 @@ pub enum ColumnType {
     I32,
     I16,
     F64,
+    F32,
     Timestamp,
 }
 
@@ -39,10 +41,11 @@ impl FromStr for ColumnType {
             return Ok(ColumnType::String);
         }
         return match foramted.as_str() {
-            "tinyint" | "smallint" | "integer" | "bigint" => Ok(ColumnType::I64),
-            "float" | "real" | "double" | "double precision" | "numeric" | "decimal" => {
-                Ok(ColumnType::F64)
-            }
+            "tinyint" | "smallint" => Ok(ColumnType::I16),
+            "integer" => Ok(ColumnType::I32),
+            "bigint" => Ok(ColumnType::I64),
+            "float" | "real" => Ok(ColumnType::F32),
+            "double" | "double precision" | "numeric" | "decimal" => Ok(ColumnType::F64),
             "character" | "varchar" | "nvarchar" | "char" | "nchar" | "clob" | "text"
             | "bpchar" => Ok(ColumnType::String),
 
