@@ -43,7 +43,7 @@ impl PostgresDB {
             .query(
                 "SELECT column_name, is_nullable
             FROM information_schema.columns 
-            WHERE table_name = $1 
+            WHERE table_name = $1 AND table_schema = current_schema
             ORDER BY ordinal_position",
                 &[&table],
             )
