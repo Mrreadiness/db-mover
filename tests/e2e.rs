@@ -133,3 +133,46 @@ fn out_table_is_not_empty(
 
     assert!(db_mover::run(args.clone()).is_err());
 }
+
+#[rstest]
+#[case("public", "test_schema")]
+#[case("test_schema", "public")]
+#[case("test_schema", "test_schema")]
+#[case("test_schema", "other_test_schema")]
+fn postgres_different_schemas(#[case] in_schema: &str, #[case] out_schema: &str) {
+    let mut in_db = TestPostresDatabase::new();
+    let mut out_db = TestPostresDatabase::new();
+    let in_table = format!("{in_schema}.test");
+    let out_table = format!("{out_schema}.test");
+    let query = format!("CREATE SCHEMA IF NOT EXISTS {in_schema}");
+    in_db.client.execute(&query, &[]).unwrap();
+
+    let query = format!("CREATE SCHEMA IF NOT EXISTS {out_schema}");
+    out_db.client.execute(&query, &[]).unwrap();
+    in_db.create_test_table(&in_table);
+    out_db.create_test_table(&out_table);
+    assert_eq!(
+        in_db.get_all_rows(&in_table),
+        out_db.get_all_rows(&out_table)
+    );
+    in_db.fill_test_table(&in_table, 10);
+
+    let in_uri = db_mover::uri::URI::Postgres(format!(
+        "{}?options=-c%20search_path={in_schema}",
+        in_db.uri
+    ));
+    let out_uri = db_mover::uri::URI::Postgres(format!(
+        "{}?options=-c%20search_path={out_schema}",
+        out_db.uri
+    ));
+
+    let mut args = db_mover::args::Args::new(in_uri, out_uri);
+    args.table.push("test".to_string());
+
+    db_mover::run(args).unwrap();
+
+    assert_eq!(
+        in_db.get_all_rows(&in_table),
+        out_db.get_all_rows(&out_table)
+    );
+}
