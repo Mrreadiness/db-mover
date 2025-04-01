@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use anyhow::Context;
+use tracing::info;
 
 use crate::{
     args::Args,
@@ -54,6 +55,7 @@ impl TableMigrator {
         table: &str,
         settings: TableMigratorSettings,
     ) -> anyhow::Result<TableMigrator> {
+        info!("Collecting info about table {table}");
         let reader_table_info = reader
             .get_table_info(table, settings.no_count)
             .context("Unable to get information about source table")?;
@@ -100,6 +102,7 @@ impl TableMigrator {
             sender.send(row).map_err(|_| Error::Stopped)?;
             tracker.inc_reader(1);
         }
+        tracker.finish_reader();
         return Ok(());
     }
 
@@ -135,10 +138,11 @@ impl TableMigrator {
         let process_result = |r: Result<(), Error>| match r {
             Ok(()) | Err(Error::Stopped) => Ok(()),
             Err(Error::Other(e)) => {
-                self.stopped.store(true, Ordering::SeqCst);
+                self.stopped.store(true, Ordering::Relaxed);
                 Err(e)
             }
         };
+        info!("Start moving data of table {}", self.target_format.name);
         return std::thread::scope(|s| {
             let mut handles = Vec::new();
             handles.push(s.spawn(|| {
@@ -167,6 +171,7 @@ impl TableMigrator {
             for handle in handles {
                 handle.join().unwrap()?;
             }
+            self.tracker.finish_writer();
             return Ok(());
         });
     }

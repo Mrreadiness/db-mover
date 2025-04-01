@@ -3,6 +3,7 @@ use std::io::Write;
 use anyhow::Context;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::{Client, NoTls};
+use tracing::debug;
 
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
@@ -20,6 +21,7 @@ pub struct PostgresDB {
 impl PostgresDB {
     pub fn new(uri: &str) -> anyhow::Result<Self> {
         let client = Client::connect(uri, NoTls)?;
+        debug!("Connected to postgres {uri}");
         return Ok(Self {
             client,
             uri: uri.to_string(),

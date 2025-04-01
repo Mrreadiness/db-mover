@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use rusqlite::{params_from_iter, Connection, OpenFlags};
+use tracing::debug;
 
 use crate::databases::{
     table::{Row, Value},
@@ -28,6 +29,7 @@ impl SqliteDB {
                 | OpenFlags::SQLITE_OPEN_CREATE
                 | OpenFlags::SQLITE_OPEN_URI,
         )?;
+        debug!("Connected to sqlite {uri}");
         return Ok(SqliteDB { connection: conn });
     }
 

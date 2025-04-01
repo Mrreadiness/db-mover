@@ -19,6 +19,7 @@ tracing = "0.1.41"
 chrono = "0.4.40"
 thiserror = "2"
 ouroboros = "0.18.5"
+num-format = "0.4.4"
 
 [dev-dependencies]
 criterion = "0.5.1"

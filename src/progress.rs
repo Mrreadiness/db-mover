@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use num_format::{Locale, ToFormattedString};
 use tracing::info;
 
 struct RateLimiter {
@@ -64,6 +65,7 @@ impl Display for FormattedDuration {
 struct ProgressTracker {
     total: Option<u64>,
     current: atomic::AtomicU64,
+    finished: atomic::AtomicBool,
     started: Instant,
 }
 
@@ -72,6 +74,7 @@ impl ProgressTracker {
         return Self {
             total,
             current: atomic::AtomicU64::new(0),
+            finished: atomic::AtomicBool::new(false),
             started: Instant::now(),
         };
     }
@@ -83,25 +86,52 @@ impl ProgressTracker {
     fn current(&self) -> u64 {
         return self.current.load(atomic::Ordering::Relaxed);
     }
+
+    fn finished(&self) -> bool {
+        return self.finished.load(atomic::Ordering::Relaxed);
+    }
+
+    fn finish(&self) {
+        self.finished.store(true, atomic::Ordering::Relaxed);
+    }
 }
 
 impl Display for ProgressTracker {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let current = self.current.load(atomic::Ordering::Relaxed);
-        let per_sec = current / self.started.elapsed().as_secs();
+        let current = self.current();
+        f.write_fmt(format_args!(
+            "[{}] ",
+            FormattedDuration(self.started.elapsed()),
+        ))?;
+        let finished = self.finished();
+        if finished {
+            f.write_str("Finished ")?;
+        }
+        // Prevent zero division
+        let per_sec = current / std::cmp::max(self.started.elapsed().as_secs(), 1);
+
         if let Some(total) = self.total {
-            let percent = current * 100 / total;
-            let percent_remainder = (current * 10000 / total) % 100;
-            let eta = FormattedDuration(Duration::from_secs((total - current) / per_sec));
+            let mut percent = 100;
+            let mut percent_remainder = 0;
+            if total > 0 {
+                percent = current * 100 / total;
+                percent_remainder = (current * 10000 / total) % 100;
+            }
             f.write_fmt(format_args!(
-                "[{}] Processed: {percent}.{percent_remainder}% ({current}/{total}) Rows per sec: {per_sec} ETA: {eta}",
-                FormattedDuration(self.started.elapsed()),
+                "Processed: {percent}.{percent_remainder:02}% ({}/{}) ",
+                current.to_formatted_string(&Locale::en),
+                total.to_formatted_string(&Locale::en),
             ))?;
+            if !finished && per_sec > 0 {
+                let eta = FormattedDuration(Duration::from_secs((total - current) / per_sec));
+                f.write_fmt(format_args!("ETA: {eta} "))?;
+            }
         } else {
-            f.write_fmt(format_args!(
-                "[{}] Processed: {current} Rows per sec: {per_sec}",
-                FormattedDuration(self.started.elapsed()),
-            ))?;
+            f.write_fmt(format_args!("Processed: {current} "))?;
+        }
+
+        if !finished {
+            f.write_fmt(format_args!("Rows per sec: {per_sec} "))?;
         }
         return Ok(());
     }
@@ -123,6 +153,14 @@ impl TableMigrationProgress {
     pub fn inc_writer(&self, value: u64) {
         self.writer.inc(value);
         self.log_with_limit();
+    }
+
+    pub fn finish_reader(&self) {
+        self.reader.finish();
+    }
+
+    pub fn finish_writer(&self) {
+        self.writer.finish();
     }
 
     pub fn reader_processed(&self) -> u64 {
