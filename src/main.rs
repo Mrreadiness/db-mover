@@ -1,15 +1,15 @@
 use clap::Parser;
-use tracing::Level;
 
 fn main() -> anyhow::Result<()> {
     let args = db_mover::args::Args::parse();
-    if args.quiet {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing_subscriber::filter::LevelFilter::OFF)
-            .init();
+    let level_filter = if args.quiet {
+        tracing_subscriber::filter::LevelFilter::OFF
     } else {
-        tracing_subscriber::fmt().with_max_level(Level::INFO).init();
-    }
+        tracing_subscriber::filter::LevelFilter::from_level(args.log_level)
+    };
+    tracing_subscriber::fmt()
+        .with_max_level(level_filter)
+        .init();
 
     return db_mover::run(args);
 }

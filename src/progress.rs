@@ -1,88 +1,163 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle, TermLike};
-use std::io;
+use std::{
+    fmt::Display,
+    sync::atomic,
+    time::{Duration, Instant},
+};
+
 use tracing::info;
 
-/// Terminal Like logger, workaround in case if there is no terminal
-#[derive(Debug)]
-pub struct TermLoggger;
+struct RateLimiter {
+    last_usage: atomic::AtomicU64,
+    min_duration_between: Duration,
+    started: Instant,
+}
 
-impl TermLike for TermLoggger {
-    fn width(&self) -> u16 {
-        return 100;
-    }
-    fn height(&self) -> u16 {
-        return 20;
-    }
-
-    fn move_cursor_up(&self, _n: usize) -> io::Result<()> {
-        return Ok(());
-    }
-    fn move_cursor_down(&self, _n: usize) -> io::Result<()> {
-        return Ok(());
-    }
-    fn move_cursor_right(&self, _n: usize) -> io::Result<()> {
-        return Ok(());
-    }
-    fn move_cursor_left(&self, _n: usize) -> io::Result<()> {
-        return Ok(());
+impl RateLimiter {
+    fn new(min_secs_between: u64) -> Self {
+        return Self {
+            last_usage: atomic::AtomicU64::new(0),
+            min_duration_between: Duration::from_secs(min_secs_between),
+            started: Instant::now(),
+        };
     }
 
-    /// Write a string and add a newline.
-    fn write_line(&self, s: &str) -> io::Result<()> {
-        if !s.trim().is_empty() {
-            info!("{s}");
+    fn get_token(&self) -> Result<(), ()> {
+        let last_usage = Duration::from_secs(self.last_usage.load(atomic::Ordering::Relaxed));
+        if self.started.elapsed() - last_usage < self.min_duration_between {
+            return Err(());
         }
-        return Ok(());
+        let new_usage = self.started.elapsed();
+
+        return match self.last_usage.compare_exchange_weak(
+            last_usage.as_secs(),
+            new_usage.as_secs(),
+            atomic::Ordering::Relaxed,
+            atomic::Ordering::Relaxed,
+        ) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(()),
+        };
+    }
+}
+
+#[derive(Debug)]
+pub struct FormattedDuration(pub Duration);
+
+impl Display for FormattedDuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut t = self.0.as_secs();
+        let seconds = t % 60;
+        t /= 60;
+        let minutes = t % 60;
+        t /= 60;
+        let hours = t % 24;
+        t /= 24;
+        if t > 0 {
+            let days = t;
+            write!(f, "{days}d {hours:02}:{minutes:02}:{seconds:02}")
+        } else {
+            write!(f, "{hours:02}:{minutes:02}:{seconds:02}")
+        }
+    }
+}
+
+struct ProgressTracker {
+    total: Option<u64>,
+    current: atomic::AtomicU64,
+    started: Instant,
+}
+
+impl ProgressTracker {
+    fn new(total: Option<u64>) -> Self {
+        return Self {
+            total,
+            current: atomic::AtomicU64::new(0),
+            started: Instant::now(),
+        };
     }
 
-    /// Write a string
-    fn write_str(&self, s: &str) -> io::Result<()> {
-        return self.write_line(s);
-    }
-    /// Clear the current line and reset the cursor to beginning of the line
-    fn clear_line(&self) -> io::Result<()> {
-        return Ok(());
+    fn inc(&self, value: u64) {
+        self.current.fetch_add(value, atomic::Ordering::Relaxed);
     }
 
-    fn flush(&self) -> io::Result<()> {
+    fn current(&self) -> u64 {
+        return self.current.load(atomic::Ordering::Relaxed);
+    }
+}
+
+impl Display for ProgressTracker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let current = self.current.load(atomic::Ordering::Relaxed);
+        let per_sec = current / self.started.elapsed().as_secs();
+        if let Some(total) = self.total {
+            let percent = current * 100 / total;
+            let percent_remainder = (current * 10000 / total) % 100;
+            let eta = FormattedDuration(Duration::from_secs((total - current) / per_sec));
+            f.write_fmt(format_args!(
+                "[{}] Processed: {percent}.{percent_remainder}% ({current}/{total}) Rows per sec: {per_sec} ETA: {eta}",
+                FormattedDuration(self.started.elapsed()),
+            ))?;
+        } else {
+            f.write_fmt(format_args!(
+                "[{}] Processed: {current} Rows per sec: {per_sec}",
+                FormattedDuration(self.started.elapsed()),
+            ))?;
+        }
         return Ok(());
     }
 }
 
 pub struct TableMigrationProgress {
-    pub reader: ProgressBar,
-    pub writer: ProgressBar,
-    _multibar: MultiProgress,
+    table: String,
+    reader: ProgressTracker,
+    writer: ProgressTracker,
+    limiter: RateLimiter,
 }
 
 impl TableMigrationProgress {
-    pub fn new(table: &str, num_rows: Option<u64>, quiet: bool) -> Self {
-        let multibar = MultiProgress::new();
-        if quiet {
-            multibar.set_draw_target(indicatif::ProgressDrawTarget::hidden());
-        } else if ProgressBar::no_length().is_hidden() {
-            multibar.set_draw_target(indicatif::ProgressDrawTarget::term_like_with_hz(
-                Box::new(TermLoggger {}),
-                1,
-            ));
-        }
-        let style = ProgressStyle::with_template(
-                "{msg} [{elapsed_precise}] {bar:40} {percent}% {human_pos}/{human_len} Rows per sec: {per_sec} ETA: {eta}",
-            )
-            .unwrap();
-        let reader = ProgressBar::with_draw_target(num_rows, ProgressDrawTarget::stderr())
-            .with_style(style.clone());
-        let writer =
-            ProgressBar::with_draw_target(num_rows, ProgressDrawTarget::stderr()).with_style(style);
+    pub fn inc_reader(&self, value: u64) {
+        self.reader.inc(value);
+        self.log_with_limit();
+    }
 
-        multibar.add(reader.clone());
-        multibar.add(writer.clone());
-        reader.set_message(format!("Reading table {}", table));
-        writer.set_message(format!("Writing table {}", table));
+    pub fn inc_writer(&self, value: u64) {
+        self.writer.inc(value);
+        self.log_with_limit();
+    }
+
+    pub fn reader_processed(&self) -> u64 {
+        return self.reader.current();
+    }
+
+    pub fn writer_processed(&self) -> u64 {
+        return self.writer.current();
+    }
+
+    fn log_with_limit(&self) {
+        if self.limiter.get_token().is_ok() {
+            self.log();
+        }
+    }
+
+    fn log(&self) {
+        info!("Reading table {} {}", self.table, self.reader);
+        info!("Writing table {} {}", self.table, self.writer);
+    }
+}
+
+impl Drop for TableMigrationProgress {
+    fn drop(&mut self) {
+        self.log();
+    }
+}
+
+impl TableMigrationProgress {
+    pub fn new(table: &str, num_rows: Option<u64>) -> Self {
         return Self {
-            reader,
-            writer,
-            _multibar: multibar,
+            table: table.to_string(),
+            reader: ProgressTracker::new(num_rows),
+            writer: ProgressTracker::new(num_rows),
+            limiter: RateLimiter::new(1),
         };
     }
 }

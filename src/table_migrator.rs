@@ -71,8 +71,7 @@ impl TableMigrator {
         } else {
             writers.push(writer);
         }
-        let tracker =
-            TableMigrationProgress::new(table, reader_table_info.num_rows, settings.quiet);
+        let tracker = TableMigrationProgress::new(table, reader_table_info.num_rows);
         let (sender, reciever) = channel::create_channel(settings.queue_size);
         return Ok(TableMigrator {
             reader,
@@ -99,9 +98,8 @@ impl TableMigrator {
             }
             let row = result?;
             sender.send(row).map_err(|_| Error::Stopped)?;
-            tracker.reader.inc(1);
+            tracker.inc_reader(1);
         }
-        tracker.reader.finish();
         return Ok(());
     }
 
@@ -122,15 +120,14 @@ impl TableMigrator {
             batch.push(row);
             if batch.len() == batch_size {
                 writer.write_batch_with_retry(&batch, table, batch_retries)?;
-                tracker.writer.inc(batch.len().try_into().unwrap());
+                tracker.inc_writer(batch.len().try_into().unwrap());
                 batch.clear();
             }
         }
         if !batch.is_empty() {
             writer.write_batch_with_retry(&batch, table, batch_retries)?;
-            tracker.writer.inc(batch.len().try_into().unwrap());
+            tracker.inc_writer(batch.len().try_into().unwrap());
         }
-        tracker.writer.finish();
         return Ok(());
     }
 
@@ -258,7 +255,7 @@ mod tests {
             Ok(Box::new(rows))
         });
         let (sender, receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None);
         let stopped = AtomicBool::new(false);
 
         let result = TableMigrator::start_reading(
@@ -269,7 +266,7 @@ mod tests {
             &stopped,
         );
         assert!(matches!(result, Ok(())));
-        assert_eq!(tracker.reader.position(), NUM_ROWS);
+        assert_eq!(tracker.reader_processed(), NUM_ROWS);
         assert_eq!(receiver.len() as u64, NUM_ROWS);
     }
 
@@ -282,7 +279,7 @@ mod tests {
             Ok(Box::new(rows))
         });
         let (sender, _receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None);
         let stopped = AtomicBool::new(true);
 
         let result = TableMigrator::start_reading(
@@ -305,7 +302,7 @@ mod tests {
         });
         let (sender, receiver) = channel::create_channel(10);
         drop(receiver);
-        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None);
         let stopped = AtomicBool::new(true);
 
         let result = TableMigrator::start_reading(
@@ -327,7 +324,7 @@ mod tests {
             Ok(())
         });
         let (sender, receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None);
         for _ in 0..NUM_ROWS {
             sender.send(Row::default()).unwrap();
         }
@@ -359,7 +356,7 @@ mod tests {
             });
 
         let (sender, receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None);
         for _ in 0..NUM_ROWS {
             sender.send(Row::default()).unwrap();
         }
@@ -382,7 +379,7 @@ mod tests {
     fn test_writing_stops_on_signal() {
         let db_mock = MockDB::new();
         let (sender, receiver) = channel::create_channel(10);
-        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None);
         sender.send(Row::default()).unwrap();
         let stopped = AtomicBool::new(true);
 
@@ -403,7 +400,7 @@ mod tests {
         let db_mock = MockDB::new();
         let (sender, receiver) = channel::create_channel(10);
         drop(sender);
-        let tracker = TableMigrationProgress::new(TABLE_NAME, None, true);
+        let tracker = TableMigrationProgress::new(TABLE_NAME, None);
         let stopped = AtomicBool::new(true);
 
         let result = TableMigrator::start_writing(
