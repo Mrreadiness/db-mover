@@ -3,7 +3,6 @@ name = "db-mover"
 description = "Tool to move data between databases"
 version = "0.1.0"
 edition = "2021"
-bench = false
 
 [lib]
 bench = false
