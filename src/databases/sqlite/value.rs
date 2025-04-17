@@ -1,7 +1,7 @@
 use crate::databases::table::{Column, ColumnType, Value};
 use rusqlite::{
-    types::{FromSql, ToSqlOutput, ValueRef},
     ToSql,
+    types::{FromSql, ToSqlOutput, ValueRef},
 };
 
 impl TryFrom<(&Column, ValueRef<'_>)> for Value {

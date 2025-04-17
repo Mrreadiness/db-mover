@@ -12,17 +12,16 @@ cargo build --release
 ```
 
 ### Tests
+Docker required.
 
 Run tests:
 ```bash
-POSTGRES_URI="postgres://username@localhost/postgres" cargo test
+cargo test
 ```
-
-`POSTGRES_URI` - URI for database, which will be used in tests. However, for each test run new database will be created and dropped. 
 
 Run benchmarks:
 ```bash
-POSTGRES_URI="postgres://username@localhost/postgres" cargo bench
+cargo bench
 ```
 
 ### Pre-commit hooks

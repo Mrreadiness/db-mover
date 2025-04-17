@@ -1,42 +1,36 @@
 use fake::{Fake, Faker};
+use testcontainers::{Container, ImageExt, runners::SyncRunner};
+
 use postgres::{Client, NoTls};
 
-use super::{gen_database_name, row::TestRow, testable_database::TestableDatabase};
+use super::{row::TestRow, testable_database::TestableDatabase};
 
 pub struct TestPostresDatabase {
-    name: String,
     pub uri: String,
     pub client: Client,
-    base_client: Client,
+    container: Container<testcontainers_modules::postgres::Postgres>,
 }
 
 impl TestPostresDatabase {
     pub fn new() -> Self {
-        let base_uri =
-            std::env::var("POSTGRES_URI").expect("POSTGRES_URI env is required to run this test");
+        let container = testcontainers_modules::postgres::Postgres::default()
+            .with_tag("17-alpine")
+            .start()
+            .unwrap();
 
-        let db_name_separtor = base_uri
-            .rfind("/")
-            .expect("Failed to find database name separtor in the URI");
-        let (base_uri_without_db, _) = base_uri.split_at(db_name_separtor);
-        let name = gen_database_name();
-        let uri = format!("{base_uri_without_db}/{name}");
-
-        let mut base_client = Client::connect(&base_uri, NoTls)
-            .expect("Unable to connect to postgres database for tests");
-        let query = format!("CREATE DATABASE {name}");
-        base_client
-            .execute(&query, &[])
-            .expect("Unable to create database in postgres to run tests");
+        let uri = format!(
+            "postgres://postgres:postgres@{}:{}/postgres",
+            container.get_host().unwrap(),
+            container.get_host_port_ipv4(5432).unwrap(),
+        );
 
         let client = Client::connect(&uri, NoTls)
             .expect("Unable to connect to the database created for tests");
 
         return Self {
-            name,
             uri,
             client,
-            base_client,
+            container,
         };
     }
 }
@@ -62,7 +56,7 @@ impl TestableDatabase for TestPostresDatabase {
 
     fn create_test_table(&mut self, name: &str) {
         let query = format!(
-        "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real REAL, text TEXT, blob BYTEA, timestamp TIMESTAMP)"
+            "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real REAL, text TEXT, blob BYTEA, timestamp TIMESTAMP)"
         );
         self.client
             .execute(&query, &[])
@@ -107,12 +101,5 @@ impl TestableDatabase for TestPostresDatabase {
             .into_iter()
             .map(|row| row.into())
             .collect();
-    }
-}
-
-impl Drop for TestPostresDatabase {
-    fn drop(&mut self) {
-        let query = format!("DROP DATABASE {} WITH (FORCE)", self.name);
-        self.base_client.execute(&query, &[]).unwrap();
     }
 }

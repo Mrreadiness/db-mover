@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::Context;
-use rusqlite::{params_from_iter, Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, params_from_iter};
 use tracing::debug;
 
 use crate::databases::{

@@ -4,7 +4,7 @@ pub mod row;
 pub mod sqlite;
 pub mod testable_database;
 
-use rand::distr::{slice::Choose, Distribution};
+use rand::distr::{Distribution, slice::Choose};
 
 fn gen_database_name() -> String {
     let chars = [

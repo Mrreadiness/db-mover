@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use db_mover::uri::URI;
 use fake::{Fake, Faker};
-use rusqlite::{params, Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, params};
 use tempfile::TempDir;
 
 use super::{gen_database_name, row::TestRow, testable_database::TestableDatabase};
