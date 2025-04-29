@@ -188,7 +188,7 @@ impl TableMigrator {
 #[cfg(test)]
 mod tests {
     use crate::databases::table::TableInfo;
-    use crate::databases::traits::{DBInfoProvider, ReaderIterator};
+    use crate::databases::traits::{DBInfoProvider, ReaderIterator, WriterError};
 
     use super::*;
     use mockall::{mock, predicate::*};
@@ -214,7 +214,8 @@ mod tests {
             fn read_iter<'a>(&'a mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'a>>;
         }
         impl DBWriter for DB {
-            fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()>;
+            fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError>;
+            fn recover(&mut self) -> anyhow::Result<()>;
         }
     }
 
@@ -541,7 +542,7 @@ mod tests {
         writer_mock
             .expect_write_batch()
             .times(1)
-            .returning(|_, _| Err(anyhow::anyhow!("Test error")));
+            .returning(|_, _| Err(WriterError::Unrecoverable(anyhow::anyhow!("Test error"))));
 
         let settings = TableMigratorSettings::default();
         let migrator = TableMigrator::new(

@@ -9,7 +9,7 @@ use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
 
 use super::table::{Column, ColumnType, TableInfo};
-use super::traits::ReaderIterator;
+use super::traits::{ReaderIterator, WriterError};
 
 mod value;
 
@@ -20,12 +20,16 @@ pub struct PostgresDB {
 
 impl PostgresDB {
     pub fn new(uri: &str) -> anyhow::Result<Self> {
-        let client = Client::connect(uri, NoTls)?;
+        let client = Self::connect(uri)?;
         debug!("Connected to postgres {uri}");
         return Ok(Self {
             client,
             uri: uri.to_string(),
         });
+    }
+
+    fn connect(uri: &str) -> Result<Client, postgres::Error> {
+        return Client::connect(uri, NoTls);
     }
 
     fn get_num_rows(&mut self, table: &str) -> anyhow::Result<u64> {
@@ -163,7 +167,7 @@ impl DBWriter for PostgresDB {
         return PostgresDB::new(&self.uri).map(|writer| Box::new(writer) as _);
     }
 
-    fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
+    fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {
         let query = format!("COPY {table} FROM STDIN WITH BINARY");
         let mut writer = self
             .client
@@ -189,6 +193,13 @@ impl DBWriter for PostgresDB {
         writer
             .finish()
             .context("Failed to finish writing to postgres")?;
+        return Ok(());
+    }
+
+    fn recover(&mut self) -> anyhow::Result<()> {
+        if self.client.is_closed() {
+            self.client = Self::connect(&self.uri)?;
+        }
         return Ok(());
     }
 }

@@ -11,7 +11,7 @@ use crate::databases::{
 
 use super::{
     table::{Column, TableInfo},
-    traits::ReaderIterator,
+    traits::{ReaderIterator, WriterError},
 };
 
 mod value;
@@ -50,6 +50,29 @@ impl SqliteDB {
             });
         }
         return Ok(result);
+    }
+
+    fn write_batch_impl(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
+        let trx = self
+            .connection
+            .transaction()
+            .context("Failed to open transaction")?;
+        {
+            let placeholder = format!(
+                "({})",
+                batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+            );
+            let query = format!("INSERT INTO {table} VALUES {placeholder}");
+            let mut stmt = trx
+                .prepare(&query)
+                .context("Failed to create write query")?;
+            for row in batch {
+                stmt.execute(params_from_iter(row.iter()))
+                    .context("Failed to write data")?;
+            }
+        }
+        trx.commit().context("Failed to commit")?;
+        return Ok(());
     }
 }
 
@@ -139,26 +162,14 @@ impl DBReader for SqliteDB {
 }
 
 impl DBWriter for SqliteDB {
-    fn write_batch(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
-        let trx = self
-            .connection
-            .transaction()
-            .context("Failed to open transaction")?;
-        {
-            let placeholder = format!(
-                "({})",
-                batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-            );
-            let query = format!("INSERT INTO {table} VALUES {placeholder}");
-            let mut stmt = trx
-                .prepare(&query)
-                .context("Failed to create write query")?;
-            for row in batch {
-                stmt.execute(params_from_iter(row.iter()))
-                    .context("Failed to write data")?;
-            }
-        }
-        trx.commit().context("Failed to commit")?;
+    fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {
+        // SQLite is not network dependent, assume that all errors are Unrecoverable
+        return self
+            .write_batch_impl(batch, table)
+            .map_err(WriterError::Unrecoverable);
+    }
+
+    fn recover(&mut self) -> anyhow::Result<()> {
         return Ok(());
     }
 }

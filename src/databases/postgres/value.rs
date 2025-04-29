@@ -3,7 +3,10 @@ use std::io::Write;
 use chrono::NaiveDateTime;
 use postgres::types::Type;
 
-use crate::databases::table::{ColumnType, Value};
+use crate::databases::{
+    table::{ColumnType, Value},
+    traits::WriterError,
+};
 
 impl TryFrom<&Type> for ColumnType {
     type Error = anyhow::Error;
@@ -63,7 +66,7 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
 const POSTGRES_EPOCH_MICROS: i64 = 946684800000000;
 
 impl Value {
-    pub(crate) fn write_postgres_bytes(&self, writer: &mut impl Write) -> anyhow::Result<()> {
+    pub(crate) fn write_postgres_bytes(&self, writer: &mut impl Write) -> Result<(), WriterError> {
         if self == &Value::Null {
             writer.write_all(&(-1_i32).to_be_bytes())?;
             return Ok(());
@@ -103,7 +106,11 @@ impl Value {
                 writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
                 writer.write_all(&val.to_be_bytes())?;
             }
-            _ => return Err(anyhow::anyhow!("Unsupported type conversion")),
+            _ => {
+                return Err(WriterError::Unrecoverable(anyhow::anyhow!(
+                    "Unsupported type conversion"
+                )));
+            }
         };
         return Ok(());
     }
