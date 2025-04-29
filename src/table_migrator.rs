@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use anyhow::Context;
+use thiserror::Error;
 use tracing::info;
 
 use crate::{
@@ -10,7 +11,6 @@ use crate::{
         table::{Row, TableInfo},
         traits::{DBReader, DBWriter},
     },
-    error::Error,
     progress::TableMigrationProgress,
 };
 
@@ -35,6 +35,14 @@ impl From<&Args> for TableMigratorSettings {
             batch_write_retries: args.batch_write_retries,
         };
     }
+}
+
+#[derive(Error, Debug)]
+enum MigratorError {
+    #[error("Stopeed because of the error in an another thread")]
+    Stopped,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 pub struct TableMigrator {
@@ -92,14 +100,14 @@ impl TableMigrator {
         tracker: &TableMigrationProgress,
         target_format: TableInfo,
         stopped: &std::sync::atomic::AtomicBool,
-    ) -> Result<(), Error> {
+    ) -> Result<(), MigratorError> {
         let iterator = reader.read_iter(target_format)?;
         for result in iterator {
             if stopped.load(Ordering::Relaxed) {
-                return Err(Error::Stopped);
+                return Err(MigratorError::Stopped);
             }
             let row = result?;
-            sender.send(row).map_err(|_| Error::Stopped)?;
+            sender.send(row).map_err(|_| MigratorError::Stopped)?;
             tracker.inc_reader(1);
         }
         tracker.finish_reader();
@@ -114,11 +122,11 @@ impl TableMigrator {
         batch_size: usize,
         batch_retries: usize,
         stopped: &std::sync::atomic::AtomicBool,
-    ) -> Result<(), Error> {
+    ) -> Result<(), MigratorError> {
         let mut batch: Vec<Row> = Vec::with_capacity(batch_size);
         while let Ok(row) = reciever.recv() {
             if stopped.load(Ordering::Relaxed) {
-                return Err(Error::Stopped);
+                return Err(MigratorError::Stopped);
             }
             batch.push(row);
             if batch.len() == batch_size {
@@ -135,9 +143,9 @@ impl TableMigrator {
     }
 
     pub fn run(self) -> anyhow::Result<()> {
-        let process_result = |r: Result<(), Error>| match r {
-            Ok(()) | Err(Error::Stopped) => Ok(()),
-            Err(Error::Other(e)) => {
+        let process_result = |r: Result<(), MigratorError>| match r {
+            Ok(()) | Err(MigratorError::Stopped) => Ok(()),
+            Err(MigratorError::Other(e)) => {
                 self.stopped.store(true, Ordering::Relaxed);
                 Err(e)
             }
@@ -294,7 +302,7 @@ mod tests {
             TableInfo::default_out(),
             &stopped,
         );
-        assert!(matches!(result, Err(Error::Stopped)));
+        assert!(matches!(result, Err(MigratorError::Stopped)));
     }
 
     #[test]
@@ -317,7 +325,7 @@ mod tests {
             TableInfo::default_out(),
             &stopped,
         );
-        assert!(matches!(result, Err(Error::Stopped)));
+        assert!(matches!(result, Err(MigratorError::Stopped)));
     }
 
     #[test]
@@ -397,7 +405,7 @@ mod tests {
             3,
             &stopped,
         );
-        assert!(matches!(result, Err(Error::Stopped)));
+        assert!(matches!(result, Err(MigratorError::Stopped)));
     }
 
     #[test]

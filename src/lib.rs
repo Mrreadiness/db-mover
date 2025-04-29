@@ -3,7 +3,6 @@ use tracing::info;
 pub mod args;
 pub mod channel;
 pub mod databases;
-pub mod error;
 pub mod progress;
 pub mod table_migrator;
 pub mod uri;
