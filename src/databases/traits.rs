@@ -1,5 +1,8 @@
+use std::thread::sleep;
 use thiserror::Error;
 use tracing::error;
+
+use crate::retry::ExponentialRetry;
 
 use super::table::{Row, TableInfo};
 
@@ -40,17 +43,18 @@ pub trait DBWriter: Send + DBInfoProvider {
         &mut self,
         batch: &[Row],
         table: &str,
-        left_reties: usize,
+        mut retry: ExponentialRetry,
     ) -> anyhow::Result<()> {
         return match self.write_batch(batch, table) {
-            Err(WriterError::Recoverable(err)) => {
-                if left_reties == 0 {
-                    return Err(err);
+            Err(WriterError::Recoverable(err)) => match retry.next() {
+                Some(duration) => {
+                    error!("Got error: {err:?}. Retry after: {duration:?}");
+                    sleep(duration);
+                    self.recover()?;
+                    return self.write_batch_with_retry(batch, table, retry);
                 }
-                error!("Got error: {err:?}. Retries left: {left_reties}");
-                self.recover()?;
-                return self.write_batch_with_retry(batch, table, left_reties - 1);
-            }
+                None => Err(err),
+            },
             Err(WriterError::Unrecoverable(err)) => Err(err),
             Ok(()) => Ok(()),
         };
@@ -62,6 +66,8 @@ pub trait DBWriter: Send + DBInfoProvider {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::databases::table::TableInfo;
     use crate::databases::traits::WriterError;
 
@@ -97,7 +103,11 @@ mod tests {
             .times(expected_retries)
             .returning(|| Ok(()));
 
-        let result = writer.write_batch_with_retry(&[], TABLE_NAME, expected_retries);
+        let result = writer.write_batch_with_retry(
+            &[],
+            TABLE_NAME,
+            ExponentialRetry::with_base_duration(expected_retries, Duration::from_millis(1)),
+        );
         assert!(result.is_err());
         let error = result.unwrap_err();
 
@@ -116,7 +126,11 @@ mod tests {
 
         writer.expect_recover().times(0).returning(|| Ok(()));
 
-        let result = writer.write_batch_with_retry(&[], TABLE_NAME, 3);
+        let result = writer.write_batch_with_retry(
+            &[],
+            TABLE_NAME,
+            ExponentialRetry::with_base_duration(3, Duration::from_millis(1)),
+        );
         assert!(result.is_err());
         let error = result.unwrap_err();
 

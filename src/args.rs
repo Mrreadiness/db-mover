@@ -30,8 +30,9 @@ pub struct Args {
     #[arg(long, default_value_t = 10_000)]
     pub batch_write_size: usize,
 
-    /// Number of retries to write a batch
-    #[arg(long, default_value_t = 3)]
+    /// Number of retries to write a batch. Exponential retry is used, with start value 500ms and
+    /// factor of 2.
+    #[arg(long, default_value_t = 5)]
     pub batch_write_retries: usize,
 
     /// Disable output

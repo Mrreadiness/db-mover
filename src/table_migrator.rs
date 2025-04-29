@@ -12,6 +12,7 @@ use crate::{
         traits::{DBReader, DBWriter},
     },
     progress::TableMigrationProgress,
+    retry::ExponentialRetry,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -120,7 +121,7 @@ impl TableMigrator {
         tracker: &TableMigrationProgress,
         table: &str,
         batch_size: usize,
-        batch_retries: usize,
+        retries: usize,
         stopped: &std::sync::atomic::AtomicBool,
     ) -> Result<(), MigratorError> {
         let mut batch: Vec<Row> = Vec::with_capacity(batch_size);
@@ -130,13 +131,13 @@ impl TableMigrator {
             }
             batch.push(row);
             if batch.len() == batch_size {
-                writer.write_batch_with_retry(&batch, table, batch_retries)?;
+                writer.write_batch_with_retry(&batch, table, ExponentialRetry::new(retries))?;
                 tracker.inc_writer(batch.len().try_into().unwrap());
                 batch.clear();
             }
         }
         if !batch.is_empty() {
-            writer.write_batch_with_retry(&batch, table, batch_retries)?;
+            writer.write_batch_with_retry(&batch, table, ExponentialRetry::new(retries))?;
             tracker.inc_writer(batch.len().try_into().unwrap());
         }
         return Ok(());
