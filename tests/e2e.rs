@@ -1,5 +1,7 @@
 mod common;
 
+use std::{thread::sleep, time::Duration};
+
 use common::postgres::TestPostresDatabase;
 use common::sqlite::TestSqliteDatabase;
 use common::testable_database::TestableDatabase;
@@ -175,4 +177,56 @@ fn postgres_different_schemas(#[case] in_schema: &str, #[case] out_schema: &str)
         in_db.get_all_rows(&in_table),
         out_db.get_all_rows(&out_table)
     );
+}
+
+#[rstest]
+fn postgres_retry_reconnect() {
+    let mut in_db = TestPostresDatabase::new();
+    let mut out_db = TestPostresDatabase::new();
+
+    create_test_tables(&mut in_db, &mut out_db);
+    in_db.fill_test_table("test", 10);
+
+    let mut trx_client = out_db.new_client();
+    let mut trx = trx_client.transaction().unwrap();
+    trx.execute("LOCK TABLE test IN EXCLUSIVE MODE", &[])
+        .unwrap();
+
+    std::thread::scope(|s| {
+        let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+        args.table.push("test".to_string());
+        args.batch_write_retries = 6;
+        s.spawn(move || {
+            db_mover::run(args).unwrap();
+        });
+        s.spawn(|| {
+            // Wait until db_mover blocked by lock
+            let mut num_queries_blocked_by_lock = 0_i64;
+            while num_queries_blocked_by_lock == 0 {
+                num_queries_blocked_by_lock = out_db
+                    .client
+                    .query_one(
+                        "SELECT count(1) FROM pg_stat_activity WHERE wait_event_type = 'Lock'",
+                        &[],
+                    )
+                    .unwrap()
+                    .get(0);
+                sleep(Duration::from_millis(500));
+            }
+            // Force disconnect all clients
+            trx.execute(
+                "SELECT pg_terminate_backend(pid)
+                 FROM pg_stat_activity
+                 WHERE pid <> pg_backend_pid()
+                   AND datname = current_database();",
+                &[],
+            )
+            .unwrap();
+            drop(trx) // Release the lock
+        });
+    });
+
+    out_db.reconect();
+
+    assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
 }

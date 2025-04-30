@@ -50,13 +50,27 @@ pub trait DBWriter: Send + DBInfoProvider {
                 Some(duration) => {
                     error!("Got error: {err:?}. Retry after: {duration:?}");
                     sleep(duration);
-                    self.recover()?;
+                    self.try_recover(&mut retry)?;
                     return self.write_batch_with_retry(batch, table, retry);
                 }
                 None => Err(err),
             },
             Err(WriterError::Unrecoverable(err)) => Err(err),
             Ok(()) => Ok(()),
+        };
+    }
+
+    fn try_recover(&mut self, retry: &mut ExponentialRetry) -> anyhow::Result<()> {
+        return match self.recover() {
+            Ok(_) => Ok(()),
+            Err(err) => match retry.next() {
+                Some(duration) => {
+                    error!("Got error while recovering: {err:?}. Retry after: {duration:?}");
+                    sleep(duration);
+                    return self.try_recover(retry);
+                }
+                None => Err(err),
+            },
         };
     }
 
@@ -136,5 +150,33 @@ mod tests {
 
         let root_cause = error.root_cause();
         assert_eq!(format!("{}", root_cause), "Test error");
+    }
+
+    #[test]
+    fn test_writer_try_recover_failed() {
+        let mut writer = MockDB::new();
+
+        let expected_retries = 3;
+
+        writer
+            .expect_write_batch()
+            .times(1)
+            .returning(|_, _| Err(WriterError::Recoverable(anyhow::anyhow!("Test error"))));
+
+        writer
+            .expect_recover()
+            .times(expected_retries)
+            .returning(|| Err(anyhow::anyhow!("Test recover error")));
+
+        let result = writer.write_batch_with_retry(
+            &[],
+            TABLE_NAME,
+            ExponentialRetry::with_base_duration(expected_retries, Duration::from_millis(1)),
+        );
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+
+        let root_cause = error.root_cause();
+        assert_eq!(format!("{}", root_cause), "Test recover error");
     }
 }

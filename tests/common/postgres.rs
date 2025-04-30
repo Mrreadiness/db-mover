@@ -33,6 +33,15 @@ impl TestPostresDatabase {
             container,
         };
     }
+
+    pub fn new_client(&self) -> Client {
+        return Client::connect(&self.uri, NoTls)
+            .expect("Unable to connect to the database created for tests");
+    }
+
+    pub fn reconect(&mut self) {
+        self.client = self.new_client();
+    }
 }
 
 fn generate_placeholders(blocks: usize) -> String {

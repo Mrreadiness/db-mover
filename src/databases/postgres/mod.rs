@@ -172,7 +172,7 @@ impl DBWriter for PostgresDB {
         let mut writer = self
             .client
             .copy_in(&query)
-            .context("Failed to star writing data into postgres")?;
+            .context("Failed to start writing data into postgres")?;
 
         writer.write_all(BINARY_SIGNATURE)?;
 
@@ -197,9 +197,9 @@ impl DBWriter for PostgresDB {
     }
 
     fn recover(&mut self) -> anyhow::Result<()> {
-        if self.client.is_closed() {
-            self.client = Self::connect(&self.uri)?;
-        }
+        debug!("Trying to reconnect to the postgres");
+        self.client = Self::connect(&self.uri)?;
+        debug!("Successfully reconnected to the postgres");
         return Ok(());
     }
 }
