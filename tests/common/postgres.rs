@@ -63,6 +63,10 @@ impl TestableDatabase for TestPostresDatabase {
         return db_mover::uri::URI::Postgres(self.uri.clone());
     }
 
+    fn execute(&mut self, query: &str) {
+        self.client.execute(query, &[]).unwrap();
+    }
+
     fn create_test_table(&mut self, name: &str) {
         let query = format!(
             "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real REAL, text TEXT, blob BYTEA, timestamp TIMESTAMP)"

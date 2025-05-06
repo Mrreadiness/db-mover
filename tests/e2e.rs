@@ -137,6 +137,29 @@ fn out_table_is_not_empty(
 }
 
 #[rstest]
+#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
+#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
+#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
+#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
+fn different_set_of_columnds(
+    #[case] mut in_db: impl TestableDatabase,
+    #[case] mut out_db: impl TestableDatabase,
+) {
+    create_test_tables(&mut in_db, &mut out_db);
+    out_db.execute("ALTER TABLE test ADD COLUMN test_different_columns INTEGER");
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+
+    assert!(db_mover::run(args.clone()).is_err());
+    assert!(
+        db_mover::run(args.clone())
+            .unwrap_err()
+            .to_string()
+            .contains("Incompatable set of columns for table test")
+    );
+}
+
+#[rstest]
 #[case("public", "test_schema")]
 #[case("test_schema", "public")]
 #[case("test_schema", "test_schema")]

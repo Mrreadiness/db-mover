@@ -38,9 +38,13 @@ impl TestableDatabase for TestSqliteDatabase {
         return URI::Sqlite(format!("sqlite://{}", self.path.to_str().unwrap()));
     }
 
+    fn execute(&mut self, query: &str) {
+        self.conn.execute(query, []).unwrap();
+    }
+
     fn create_test_table(&mut self, table_name: &str) {
         let query = format!(
-            "CREATE TABLE {table_name} (id BIGINT PRIMARY KEY, real REAL, text TEXT, blob BLOB, timestamp DATETIME)"
+            "CREATE TABLE {table_name} (id BIGINT PRIMARY KEY NOT NULL, real REAL, text TEXT, blob BLOB, timestamp DATETIME)"
         );
         self.conn.execute(&query, []).unwrap();
     }

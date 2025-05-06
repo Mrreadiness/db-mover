@@ -8,7 +8,7 @@ use crate::{
     args::Args,
     channel,
     databases::{
-        table::{Row, TableInfo},
+        table::{Column, Row, TableInfo},
         traits::{DBReader, DBWriter},
     },
     progress::TableMigrationProgress,
@@ -71,9 +71,7 @@ impl TableMigrator {
         let writer_table_info = writer
             .get_table_info(table, false)
             .context("Unable to get information about destination table")?;
-        if writer_table_info.num_rows != Some(0) {
-            return Err(anyhow::anyhow!("Destination table should be empty"));
-        }
+        Self::check_table_compatibility(&reader_table_info, &writer_table_info)?;
         let mut writers = Vec::new();
         if settings.writer_workers > 1 {
             for _ in 0..settings.writer_workers {
@@ -95,6 +93,34 @@ impl TableMigrator {
             settings,
         });
     }
+
+    fn check_table_compatibility(
+        reader_info: &TableInfo,
+        writer_info: &TableInfo,
+    ) -> anyhow::Result<()> {
+        if writer_info.num_rows != Some(0) {
+            return Err(anyhow::anyhow!(
+                "Destination table ({}) should be empty",
+                &writer_info.name
+            ));
+        }
+        let mut reader_columns: Vec<&Column> = reader_info.columns.iter().collect();
+        reader_columns.sort_by(|l, r| r.name.cmp(&l.name));
+        let mut writer_columns: Vec<&Column> = writer_info.columns.iter().collect();
+        writer_columns.sort_by(|l, r| r.name.cmp(&l.name));
+        if reader_columns != writer_columns {
+            let reader = format!("{:?}", reader_columns);
+            let writer = format!("{:?}", writer_columns);
+            return Err(anyhow::anyhow!(
+                "Incompatable set of columns for table {}.\n\
+                In: {reader}\n\
+                Out: {writer}",
+                &writer_info.name
+            ));
+        }
+        return Ok(());
+    }
+
     fn start_reading(
         mut reader: Box<dyn DBReader>,
         sender: channel::Sender,
