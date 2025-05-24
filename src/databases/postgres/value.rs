@@ -23,6 +23,7 @@ impl TryFrom<Type> for ColumnType {
             Type::BYTEA => ColumnType::Bytes,
             Type::TIMESTAMP => ColumnType::Timestamp,
             Type::JSON | Type::JSON_ARRAY | Type::JSONB | Type::JSONB_ARRAY => ColumnType::Json,
+            Type::UUID => ColumnType::Uuid,
             _ => return Err(anyhow::anyhow!("Unsupported postgres type {value}")),
         };
         return Ok(column_type);
@@ -81,6 +82,9 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::Json => row
                 .get::<_, Option<serde_json::Value>>(idx)
                 .map_or(Value::Null, Value::Json),
+            ColumnType::Uuid => row
+                .get::<_, Option<uuid::Uuid>>(idx)
+                .map_or(Value::Null, Value::Uuid),
         };
         return Ok(value);
     }
@@ -145,6 +149,11 @@ impl Value {
                     writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
                 }
                 writer.write_all(&bytes)?;
+            }
+            &Value::Uuid(val) => {
+                let bytes = val.as_bytes();
+                writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
+                writer.write_all(bytes)?;
             }
         };
         return Ok(());

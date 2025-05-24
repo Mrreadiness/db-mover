@@ -25,6 +25,11 @@ use rstest::rstest;
 #[case("json", r#"'[{"test":1},{"test":2}]'"#, r#"[{"test":1},{"test":2}]"#)]
 #[case("jsonb", r#"'{"test":1}'"#, r#"{"test":1}"#)]
 #[case("jsonb", r#"'[{"test":1},{"test":2}]'"#, r#"[{"test":1},{"test":2}]"#)]
+#[case(
+    "uuid",
+    "X'67e5504410b1426f9247bb680e5fe0c8'",
+    "67e55044-10b1-426f-9247-bb680e5fe0c8"
+)]
 fn sqlite_types_compatability(
     #[case] type_name: &str,
     #[case] value: &str,
@@ -50,16 +55,28 @@ fn sqlite_types_compatability(
 
     let mut expected = vec![None, Some(expected.to_string())];
     expected.sort();
-
-    let mut stmt = out_db
-        .conn
-        .prepare("SELECT CAST(field as TEXT) FROM test")
-        .unwrap();
-    let mut result: Vec<Option<String>> = stmt
-        .query_map([], |row| row.get::<_, Option<String>>(0))
-        .unwrap()
-        .map(|res| res.unwrap())
-        .collect();
+    let mut result: Vec<Option<String>>;
+    if type_name == "uuid" {
+        let mut stmt = out_db
+            .conn
+            .prepare("SELECT CAST(field as BLOB) FROM test")
+            .unwrap();
+        result = stmt
+            .query_map([], |row| row.get::<_, Option<uuid::Uuid>>(0))
+            .unwrap()
+            .map(|res| res.unwrap().map(|val| val.to_string()))
+            .collect();
+    } else {
+        let mut stmt = out_db
+            .conn
+            .prepare("SELECT CAST(field as TEXT) FROM test")
+            .unwrap();
+        result = stmt
+            .query_map([], |row| row.get::<_, Option<String>>(0))
+            .unwrap()
+            .map(|res| res.unwrap())
+            .collect();
+    }
     result.sort();
     assert_eq!(expected, result);
 }
@@ -83,6 +100,11 @@ fn sqlite_types_compatability(
     "jsonb",
     r#"'[{"test":1},{"test":2}]'"#,
     r#"[{"test": 1}, {"test": 2}]"#
+)]
+#[case(
+    "uuid",
+    "'67e55044-10b1-426f-9247-bb680e5fe0c8'",
+    "67e55044-10b1-426f-9247-bb680e5fe0c8"
 )]
 fn postgres_types_compatability(
     #[case] type_name: &str,

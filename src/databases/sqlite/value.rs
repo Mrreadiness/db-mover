@@ -22,6 +22,7 @@ impl TryFrom<(&Column, ValueRef<'_>)> for Value {
             ColumnType::Bytes => Value::Bytes(FromSql::column_result(val)?),
             ColumnType::Timestamp => Value::Timestamp(FromSql::column_result(val)?),
             ColumnType::Json => Value::Json(FromSql::column_result(val)?),
+            ColumnType::Uuid => Value::Uuid(FromSql::column_result(val)?),
         };
         return Ok(parsed);
     }
@@ -40,6 +41,7 @@ impl ToSql for Value {
             Value::Bytes(val) => val.to_sql(),
             Value::Timestamp(val) => val.to_sql(),
             Value::Json(val) => val.to_sql(),
+            Value::Uuid(val) => val.to_sql(),
         }
     }
 }
