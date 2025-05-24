@@ -19,6 +19,7 @@ impl TryFrom<Type> for ColumnType {
             Type::INT2 => ColumnType::I16,
             Type::FLOAT8 => ColumnType::F64,
             Type::FLOAT4 => ColumnType::F32,
+            Type::BOOL => ColumnType::Bool,
             Type::VARCHAR | Type::TEXT | Type::BPCHAR => ColumnType::String,
             Type::BYTEA => ColumnType::Bytes,
             Type::TIMESTAMP => ColumnType::Timestamp,
@@ -72,6 +73,9 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::F32 => row
                 .get::<_, Option<f32>>(idx)
                 .map_or(Value::Null, Value::F32),
+            ColumnType::Bool => row
+                .get::<_, Option<bool>>(idx)
+                .map_or(Value::Null, Value::Bool),
             ColumnType::String => row
                 .get::<_, Option<String>>(idx)
                 .map_or(Value::Null, Value::String),
@@ -132,6 +136,11 @@ impl Value {
             &Value::F32(num) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
+            }
+            &Value::Bool(val) => {
+                let val = u8::from(val);
+                writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
+                writer.write_all(&val.to_be_bytes())?;
             }
             Value::Bytes(bytes) => {
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;

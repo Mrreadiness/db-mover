@@ -10,6 +10,7 @@ pub enum Value {
     I16(i16),
     F64(f64),
     F32(f32),
+    Bool(bool),
     Timestamp(NaiveDateTime),
     Date(NaiveDate),
     Time(NaiveTime),
@@ -29,6 +30,7 @@ pub enum ColumnType {
     I16,
     F64,
     F32,
+    Bool,
     Timestamp,
     Date,
     Time,
@@ -54,6 +56,7 @@ impl FromStr for ColumnType {
             "bigint" => Ok(ColumnType::I64),
             "float" | "real" => Ok(ColumnType::F32),
             "double" | "double precision" | "numeric" | "decimal" => Ok(ColumnType::F64),
+            "bool" | "boolean" => Ok(ColumnType::Bool),
             "character" | "varchar" | "nvarchar" | "char" | "nchar" | "clob" | "text"
             | "bpchar" => Ok(ColumnType::String),
 

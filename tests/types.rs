@@ -15,6 +15,7 @@ use rstest::rstest;
 // while writing to the sqlite
 #[case("real", "123.12345", "123.12345123291")]
 #[case("double precision", "123.12345678", "123.12345678")]
+#[case("bool", "true", "1")]
 #[case("varchar(10)", "'test'", "test")]
 #[case("char(10)", "'test'", "test")]
 #[case("bpchar", "'test'", "test")]
@@ -89,6 +90,7 @@ fn sqlite_types_compatability(
 #[case("smallint", "32767", "32767")]
 #[case("real", "123.12345", "123.12345")]
 #[case("double precision", "123.12345678", "123.12345678")]
+#[case("bool", "true", "true")]
 #[case("varchar(10)", "'test'", "test")]
 #[case("char(10)", "'test'", "test")]
 #[case("bpchar", "'test'", "test")]
