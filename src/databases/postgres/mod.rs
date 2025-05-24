@@ -1,14 +1,16 @@
+use std::collections::HashMap;
 use std::io::Write;
 
 use anyhow::Context;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::{Client, NoTls};
 use tracing::debug;
+use value::PostgreColumn;
 
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
 
-use super::table::{Column, ColumnType, TableInfo};
+use super::table::{Column, TableInfo};
 use super::traits::{ReaderIterator, WriterError};
 
 mod value;
@@ -16,6 +18,7 @@ mod value;
 pub struct PostgresDB {
     uri: String,
     client: Client,
+    table_columns_cache: HashMap<String, Vec<PostgreColumn>>,
 }
 
 impl PostgresDB {
@@ -25,6 +28,7 @@ impl PostgresDB {
         return Ok(Self {
             client,
             uri: uri.to_string(),
+            table_columns_cache: HashMap::default(),
         });
     }
 
@@ -42,7 +46,7 @@ impl PostgresDB {
             .context("Failed to convert i64 to u64");
     }
 
-    fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<Column>> {
+    fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<PostgreColumn>> {
         let mut columns = Vec::new();
         let rows = self
             .client
@@ -56,9 +60,9 @@ impl PostgresDB {
             .context("Failed to query information about table")?;
         for row in rows {
             let is_nullable: &str = row.get(1);
-            columns.push(Column {
+            columns.push(PostgreColumn {
                 name: row.get(0),
-                column_type: ColumnType::I64, // Temp default
+                column_type: postgres::types::Type::UNKNOWN, // Temp default
                 nullable: is_nullable == "YES",
             })
         }
@@ -81,9 +85,21 @@ impl PostgresDB {
                 column.name,
                 column_info.name()
             );
-            column.column_type = column_info.type_().try_into()?;
+            column.column_type = column_info.type_().clone();
         }
         return Ok(columns);
+    }
+
+    fn get_columns_cached(&mut self, table: &str) -> anyhow::Result<Vec<PostgreColumn>> {
+        return match self.table_columns_cache.get(table) {
+            Some(columns) => Ok(columns.clone()),
+            None => {
+                let columns = self.get_columns(table)?;
+                self.table_columns_cache
+                    .insert(table.to_string(), columns.clone());
+                Ok(columns)
+            }
+        };
     }
 }
 
@@ -96,9 +112,13 @@ impl DBInfoProvider for PostgresDB {
                     .context("Failed to get number of rows in the table")?,
             );
         }
-        let columns = self
-            .get_columns(table)
+        let postgres_columns = self
+            .get_columns_cached(table)
             .context("Failed to get info about table columns")?;
+        let columns = postgres_columns
+            .into_iter()
+            .map(Column::try_from)
+            .collect::<anyhow::Result<Vec<Column>>>()?;
         return Ok(TableInfo {
             name: table.to_string(),
             num_rows,
@@ -168,6 +188,7 @@ impl DBWriter for PostgresDB {
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {
+        let columns = self.get_columns_cached(table)?;
         let query = format!("COPY {table} FROM STDIN WITH BINARY");
         let mut writer = self
             .client
@@ -185,8 +206,13 @@ impl DBWriter for PostgresDB {
         for row in batch {
             // Count of fields
             writer.write_all(&(row.len() as i16).to_be_bytes())?;
-            for value in row {
-                value.write_postgres_bytes(&mut writer)?;
+            assert_eq!(
+                columns.len(),
+                row.len(),
+                "Number of columns should be equal number of value in a row"
+            );
+            for (value, column) in std::iter::zip(row, &columns) {
+                value.write_postgres_bytes(&mut writer, column)?;
             }
         }
         writer.write_all(&(-1_i16).to_be_bytes())?;

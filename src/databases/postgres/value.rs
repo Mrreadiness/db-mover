@@ -5,27 +5,46 @@ use chrono::NaiveDateTime;
 use postgres::types::Type;
 
 use crate::databases::{
-    table::{ColumnType, Value},
+    table::{Column, ColumnType, Value},
     traits::WriterError,
 };
 
-impl TryFrom<&Type> for ColumnType {
+impl TryFrom<Type> for ColumnType {
     type Error = anyhow::Error;
 
-    fn try_from(value: &Type) -> Result<Self, Self::Error> {
+    fn try_from(value: Type) -> Result<Self, Self::Error> {
         let column_type = match value {
-            &Type::INT8 => ColumnType::I64,
-            &Type::INT4 => ColumnType::I32,
-            &Type::INT2 => ColumnType::I16,
-            &Type::FLOAT8 => ColumnType::F64,
-            &Type::FLOAT4 => ColumnType::F32,
-            &Type::VARCHAR | &Type::TEXT | &Type::BPCHAR => ColumnType::String,
-            &Type::BYTEA => ColumnType::Bytes,
-            &Type::TIMESTAMP => ColumnType::Timestamp,
-            &Type::JSON | &Type::JSON_ARRAY => ColumnType::Json,
+            Type::INT8 => ColumnType::I64,
+            Type::INT4 => ColumnType::I32,
+            Type::INT2 => ColumnType::I16,
+            Type::FLOAT8 => ColumnType::F64,
+            Type::FLOAT4 => ColumnType::F32,
+            Type::VARCHAR | Type::TEXT | Type::BPCHAR => ColumnType::String,
+            Type::BYTEA => ColumnType::Bytes,
+            Type::TIMESTAMP => ColumnType::Timestamp,
+            Type::JSON | Type::JSON_ARRAY | Type::JSONB | Type::JSONB_ARRAY => ColumnType::Json,
             _ => return Err(anyhow::anyhow!("Unsupported postgres type {value}")),
         };
         return Ok(column_type);
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PostgreColumn {
+    pub name: String,
+    pub column_type: postgres::types::Type,
+    pub nullable: bool,
+}
+
+impl TryFrom<PostgreColumn> for Column {
+    type Error = anyhow::Error;
+
+    fn try_from(value: PostgreColumn) -> Result<Self, Self::Error> {
+        return Ok(Column {
+            name: value.name,
+            column_type: value.column_type.try_into()?,
+            nullable: value.nullable,
+        });
     }
 }
 
@@ -71,7 +90,11 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
 const POSTGRES_EPOCH_MICROS: i64 = 946684800000000;
 
 impl Value {
-    pub(crate) fn write_postgres_bytes(&self, writer: &mut impl Write) -> Result<(), WriterError> {
+    pub(crate) fn write_postgres_bytes(
+        &self,
+        writer: &mut impl Write,
+        column: &PostgreColumn,
+    ) -> Result<(), WriterError> {
         match self {
             &Value::Null => {
                 writer.write_all(&(-1_i32).to_be_bytes())?;
@@ -113,7 +136,14 @@ impl Value {
             Value::Json(value) => {
                 let bytes =
                     serde_json::to_vec(value).context("Failed to serialize json into bytes")?;
-                writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
+                if column.column_type == Type::JSONB || column.column_type == Type::JSONB_ARRAY {
+                    let jsonb_version = 1_u8;
+                    let len = (bytes.len() + size_of_val(&jsonb_version)) as i32;
+                    writer.write_all(&(len).to_be_bytes())?;
+                    writer.write_all(&(jsonb_version).to_be_bytes())?;
+                } else {
+                    writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
+                }
                 writer.write_all(&bytes)?;
             }
         };
