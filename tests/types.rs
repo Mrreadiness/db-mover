@@ -22,6 +22,7 @@ use rstest::rstest;
 #[case("bytea", "cast('test' as BLOB)", "test")]
 #[case("timestamp", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
 #[case("date", "'2004-10-19'", "2004-10-19")]
+#[case("time", "'10:23:54'", "10:23:54")]
 #[case("json", r#"'{"test":1}'"#, r#"{"test":1}"#)]
 #[case("json", r#"'[{"test":1},{"test":2}]'"#, r#"[{"test":1},{"test":2}]"#)]
 #[case("jsonb", r#"'{"test":1}'"#, r#"{"test":1}"#)]
@@ -95,6 +96,7 @@ fn sqlite_types_compatability(
 #[case("bytea", "'test'", "\\x74657374")] // Hex output
 #[case("timestamp", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
 #[case("date", "'2004-10-19'", "2004-10-19")]
+#[case("time", "'10:23:54'", "10:23:54")]
 #[case("json", r#"'{"test":1}'"#, r#"{"test":1}"#)]
 #[case("json", r#"'[{"test":1},{"test":2}]'"#, r#"[{"test":1},{"test":2}]"#)]
 #[case("jsonb", r#"'{"test":1}'"#, r#"{"test": 1}"#)]

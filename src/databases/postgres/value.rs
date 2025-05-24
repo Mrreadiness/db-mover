@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use anyhow::Context;
-use chrono::{Datelike, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use postgres::types::Type;
 
 use crate::databases::{
@@ -23,6 +23,7 @@ impl TryFrom<Type> for ColumnType {
             Type::BYTEA => ColumnType::Bytes,
             Type::TIMESTAMP => ColumnType::Timestamp,
             Type::DATE => ColumnType::Date,
+            Type::TIME => ColumnType::Time,
             Type::JSON | Type::JSON_ARRAY | Type::JSONB | Type::JSONB_ARRAY => ColumnType::Json,
             Type::UUID => ColumnType::Uuid,
             _ => return Err(anyhow::anyhow!("Unsupported postgres type {value}")),
@@ -83,6 +84,9 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::Date => row
                 .get::<_, Option<NaiveDate>>(idx)
                 .map_or(Value::Null, Value::Date),
+            ColumnType::Time => row
+                .get::<_, Option<NaiveTime>>(idx)
+                .map_or(Value::Null, Value::Time),
             ColumnType::Json => row
                 .get::<_, Option<serde_json::Value>>(idx)
                 .map_or(Value::Null, Value::Json),
@@ -148,6 +152,11 @@ impl Value {
                 let val = date.num_days_from_ce() - POSTGRES_EPOCH.num_days_from_ce();
                 writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
                 writer.write_all(&val.to_be_bytes())?;
+            }
+            &Value::Time(time) => {
+                let microsecs = (time.num_seconds_from_midnight() as u64) * 1000000;
+                writer.write_all(&(size_of_val(&microsecs) as i32).to_be_bytes())?;
+                writer.write_all(&microsecs.to_be_bytes())?;
             }
             Value::Json(value) => {
                 let bytes =
