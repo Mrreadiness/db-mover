@@ -21,6 +21,11 @@ use rstest::rstest;
 #[case("bpchar", "'test'", "test")]
 #[case("text", "'test'", "test")]
 #[case("bytea", "cast('test' as BLOB)", "test")]
+#[case(
+    "timestamptz",
+    "'2004-10-19 10:23:54+00:00'",
+    "2004-10-19 10:23:54+00:00"
+)]
 #[case("timestamp", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
 #[case("date", "'2004-10-19'", "2004-10-19")]
 #[case("time", "'10:23:54'", "10:23:54")]
@@ -96,6 +101,7 @@ fn sqlite_types_compatability(
 #[case("bpchar", "'test'", "test")]
 #[case("text", "'test'", "test")]
 #[case("bytea", "'test'", "\\x74657374")] // Hex output
+#[case("timestamptz", "'2004-10-19 10:23:54+00'", "2004-10-19 10:23:54+00")]
 #[case("timestamp", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
 #[case("date", "'2004-10-19'", "2004-10-19")]
 #[case("time", "'10:23:54'", "10:23:54")]

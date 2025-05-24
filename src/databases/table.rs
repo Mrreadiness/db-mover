@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use std::str::FromStr;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -11,6 +11,7 @@ pub enum Value {
     F64(f64),
     F32(f32),
     Bool(bool),
+    Timestamptz(DateTime<Utc>),
     Timestamp(NaiveDateTime),
     Date(NaiveDate),
     Time(NaiveTime),
@@ -31,6 +32,7 @@ pub enum ColumnType {
     F64,
     F32,
     Bool,
+    Timestamptz,
     Timestamp,
     Date,
     Time,
@@ -61,7 +63,8 @@ impl FromStr for ColumnType {
             | "bpchar" => Ok(ColumnType::String),
 
             "blob" | "bytea" => Ok(ColumnType::Bytes),
-            "datetime" | "timestamp" | "timestamptz" => Ok(ColumnType::Timestamp),
+            "timestamptz" => Ok(ColumnType::Timestamptz),
+            "datetime" | "timestamp" => Ok(ColumnType::Timestamp),
             "date" => Ok(ColumnType::Date),
             "time" => Ok(ColumnType::Time),
             "json" | "jsonb" => Ok(ColumnType::Json),

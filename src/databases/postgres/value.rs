@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use anyhow::Context;
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
 use postgres::types::Type;
 
 use crate::databases::{
@@ -22,6 +22,7 @@ impl TryFrom<Type> for ColumnType {
             Type::BOOL => ColumnType::Bool,
             Type::VARCHAR | Type::TEXT | Type::BPCHAR => ColumnType::String,
             Type::BYTEA => ColumnType::Bytes,
+            Type::TIMESTAMPTZ => ColumnType::Timestamptz,
             Type::TIMESTAMP => ColumnType::Timestamp,
             Type::DATE => ColumnType::Date,
             Type::TIME => ColumnType::Time,
@@ -82,6 +83,9 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::Bytes => row
                 .get::<_, Option<Vec<u8>>>(idx)
                 .map_or(Value::Null, Value::Bytes),
+            ColumnType::Timestamptz => row
+                .get::<_, Option<DateTime<Utc>>>(idx)
+                .map_or(Value::Null, Value::Timestamptz),
             ColumnType::Timestamp => row
                 .get::<_, Option<NaiveDateTime>>(idx)
                 .map_or(Value::Null, Value::Timestamp),
@@ -150,6 +154,11 @@ impl Value {
                 let bytes = string.as_bytes();
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
                 writer.write_all(bytes)?;
+            }
+            &Value::Timestamptz(dt) => {
+                let val = dt.timestamp_micros() - POSTGRES_EPOCH.and_utc().timestamp_micros();
+                writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
+                writer.write_all(&val.to_be_bytes())?;
             }
             &Value::Timestamp(dt) => {
                 let val =
