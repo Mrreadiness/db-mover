@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use anyhow::Context;
-use chrono::NaiveDateTime;
+use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use postgres::types::Type;
 
 use crate::databases::{
@@ -22,6 +22,7 @@ impl TryFrom<Type> for ColumnType {
             Type::VARCHAR | Type::TEXT | Type::BPCHAR => ColumnType::String,
             Type::BYTEA => ColumnType::Bytes,
             Type::TIMESTAMP => ColumnType::Timestamp,
+            Type::DATE => ColumnType::Date,
             Type::JSON | Type::JSON_ARRAY | Type::JSONB | Type::JSONB_ARRAY => ColumnType::Json,
             Type::UUID => ColumnType::Uuid,
             _ => return Err(anyhow::anyhow!("Unsupported postgres type {value}")),
@@ -79,6 +80,9 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::Timestamp => row
                 .get::<_, Option<NaiveDateTime>>(idx)
                 .map_or(Value::Null, Value::Timestamp),
+            ColumnType::Date => row
+                .get::<_, Option<NaiveDate>>(idx)
+                .map_or(Value::Null, Value::Date),
             ColumnType::Json => row
                 .get::<_, Option<serde_json::Value>>(idx)
                 .map_or(Value::Null, Value::Json),
@@ -90,8 +94,10 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
     }
 }
 
-// Microseconds since 2000-01-01 00:00
-const POSTGRES_EPOCH_MICROS: i64 = 946684800000000;
+const POSTGRES_EPOCH: NaiveDateTime = NaiveDate::from_ymd_opt(2000, 1, 1)
+    .unwrap()
+    .and_hms_opt(0, 0, 0)
+    .unwrap();
 
 impl Value {
     pub(crate) fn write_postgres_bytes(
@@ -133,7 +139,13 @@ impl Value {
                 writer.write_all(bytes)?;
             }
             &Value::Timestamp(dt) => {
-                let val = dt.and_utc().timestamp_micros() - POSTGRES_EPOCH_MICROS;
+                let val =
+                    dt.and_utc().timestamp_micros() - POSTGRES_EPOCH.and_utc().timestamp_micros();
+                writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
+                writer.write_all(&val.to_be_bytes())?;
+            }
+            &Value::Date(date) => {
+                let val = date.num_days_from_ce() - POSTGRES_EPOCH.num_days_from_ce();
                 writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
                 writer.write_all(&val.to_be_bytes())?;
             }
