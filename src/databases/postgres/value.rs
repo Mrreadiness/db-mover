@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use anyhow::Context;
 use chrono::NaiveDateTime;
 use postgres::types::Type;
 
@@ -21,6 +22,7 @@ impl TryFrom<&Type> for ColumnType {
             &Type::VARCHAR | &Type::TEXT | &Type::BPCHAR => ColumnType::String,
             &Type::BYTEA => ColumnType::Bytes,
             &Type::TIMESTAMP => ColumnType::Timestamp,
+            &Type::JSON | &Type::JSON_ARRAY => ColumnType::Json,
             _ => return Err(anyhow::anyhow!("Unsupported postgres type {value}")),
         };
         return Ok(column_type);
@@ -57,6 +59,9 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::Timestamp => row
                 .get::<_, Option<NaiveDateTime>>(idx)
                 .map_or(Value::Null, Value::Timestamp),
+            ColumnType::Json => row
+                .get::<_, Option<serde_json::Value>>(idx)
+                .map_or(Value::Null, Value::Json),
         };
         return Ok(value);
     }
@@ -67,11 +72,10 @@ const POSTGRES_EPOCH_MICROS: i64 = 946684800000000;
 
 impl Value {
     pub(crate) fn write_postgres_bytes(&self, writer: &mut impl Write) -> Result<(), WriterError> {
-        if self == &Value::Null {
-            writer.write_all(&(-1_i32).to_be_bytes())?;
-            return Ok(());
-        }
         match self {
+            &Value::Null => {
+                writer.write_all(&(-1_i32).to_be_bytes())?;
+            }
             &Value::I64(num) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
@@ -106,10 +110,11 @@ impl Value {
                 writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
                 writer.write_all(&val.to_be_bytes())?;
             }
-            _ => {
-                return Err(WriterError::Unrecoverable(anyhow::anyhow!(
-                    "Unsupported type conversion"
-                )));
+            Value::Json(value) => {
+                let bytes =
+                    serde_json::to_vec(value).context("Failed to serialize json into bytes")?;
+                writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
+                writer.write_all(&bytes)?;
             }
         };
         return Ok(());

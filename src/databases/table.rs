@@ -11,6 +11,7 @@ pub enum Value {
     F64(f64),
     F32(f32),
     Timestamp(NaiveDateTime),
+    Json(serde_json::Value),
     Null,
 }
 
@@ -26,6 +27,7 @@ pub enum ColumnType {
     F64,
     F32,
     Timestamp,
+    Json,
 }
 
 impl FromStr for ColumnType {
@@ -51,6 +53,7 @@ impl FromStr for ColumnType {
 
             "blob" | "bytea" => Ok(ColumnType::Bytes),
             "datetime" | "timestamp" | "timestamptz" => Ok(ColumnType::Timestamp),
+            "json" | "jsonb" => Ok(ColumnType::Json),
             _ => Err(anyhow::anyhow!("Unknown column type {s}")),
         };
     }

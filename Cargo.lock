@@ -555,6 +555,8 @@ dependencies = [
  "rand 0.9.0",
  "rstest",
  "rusqlite",
+ "serde",
+ "serde_json",
  "tempfile",
  "testcontainers",
  "testcontainers-modules",
@@ -1702,6 +1704,8 @@ dependencies = [
  "chrono",
  "fallible-iterator 0.2.0",
  "postgres-protocol",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1990,6 +1994,7 @@ dependencies = [
  "fallible-streaming-iterator",
  "hashlink",
  "libsqlite3-sys",
+ "serde_json",
  "smallvec",
 ]
 

@@ -157,13 +157,17 @@ impl TableMigrator {
             }
             batch.push(row);
             if batch.len() == batch_size {
-                writer.write_batch_with_retry(&batch, table, ExponentialRetry::new(retries))?;
+                writer
+                    .write_batch_with_retry(&batch, table, ExponentialRetry::new(retries))
+                    .context("Writing error")?;
                 tracker.inc_writer(batch.len().try_into().unwrap());
                 batch.clear();
             }
         }
         if !batch.is_empty() {
-            writer.write_batch_with_retry(&batch, table, ExponentialRetry::new(retries))?;
+            writer
+                .write_batch_with_retry(&batch, table, ExponentialRetry::new(retries))
+                .context("Writing error")?;
             tracker.inc_writer(batch.len().try_into().unwrap());
         }
         return Ok(());
