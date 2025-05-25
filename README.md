@@ -2,6 +2,12 @@
 
 DB Mover is a data moving tool for different databases, aimed at providing the fastest experience.
 
+## Install
+
+```bash
+cargo install db-mover
+```
+
 ## Usage
 
 ```bash
