@@ -8,10 +8,20 @@ DB Mover is a data moving tool for different databases, aimed at providing the f
 db-mover --input "sqlite://input.db" --output "postgres://postgres@localhost/postgres" --table "table_name"
 ```
 
-Use help for options descriptions.
+Use help for options descriptions
 ```bash
 db-mover --help
 ```
+
+## Features
+
+- [x] PostgreSQL support
+- [x] SQLite support
+- [ ] MySQL / MariaDB support
+- [ ] Microsoft SQL Server support
+- [ ] Oracle support
+- [x] schema compatibility check
+- [ ] schema generation
 
 ## Types conversion
 
