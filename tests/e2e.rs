@@ -160,6 +160,48 @@ fn different_set_of_columnds(
 }
 
 #[rstest]
+#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
+#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
+#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
+#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
+fn nullable_to_non_nullable(
+    #[case] mut in_db: impl TestableDatabase,
+    #[case] mut out_db: impl TestableDatabase,
+) {
+    in_db.execute("CREATE TABLE test (test_different_columns INTEGER)");
+    out_db.execute("CREATE TABLE test (test_different_columns INTEGER NOT NULL)");
+    in_db.execute("INSERT INTO test VALUES (1)");
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+
+    assert!(db_mover::run(args.clone()).is_err());
+    assert!(
+        db_mover::run(args.clone())
+            .unwrap_err()
+            .to_string()
+            .contains("Incompatable set of columns for table test")
+    );
+}
+
+#[rstest]
+#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
+#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
+#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
+#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
+fn non_nullable_to_nullable(
+    #[case] mut in_db: impl TestableDatabase,
+    #[case] mut out_db: impl TestableDatabase,
+) {
+    in_db.execute("CREATE TABLE test (test_different_columns INTEGER NOT NULL)");
+    out_db.execute("CREATE TABLE test (test_different_columns INTEGER)");
+    in_db.execute("INSERT INTO test VALUES (1)");
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+
+    assert!(db_mover::run(args.clone()).is_ok());
+}
+
+#[rstest]
 #[case("public", "test_schema")]
 #[case("test_schema", "public")]
 #[case("test_schema", "test_schema")]

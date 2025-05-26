@@ -108,15 +108,22 @@ impl TableMigrator {
         reader_columns.sort_by(|l, r| r.name.cmp(&l.name));
         let mut writer_columns: Vec<&Column> = writer_info.columns.iter().collect();
         writer_columns.sort_by(|l, r| r.name.cmp(&l.name));
-        if reader_columns != writer_columns {
-            let reader = format!("{:?}", reader_columns);
-            let writer = format!("{:?}", writer_columns);
-            return Err(anyhow::anyhow!(
-                "Incompatable set of columns for table {}.\n\
-                In: {reader}\n\
-                Out: {writer}",
-                &writer_info.name
-            ));
+        let err = Err(anyhow::anyhow!(
+            "Incompatable set of columns for table {}.\n\
+                In: {reader_columns:?}\n\
+                Out: {writer_columns:?}",
+            &writer_info.name
+        ));
+        if reader_columns.len() != writer_columns.len() {
+            return err;
+        }
+        for (reader_column, writer_column) in std::iter::zip(reader_columns, writer_columns) {
+            if reader_column.name != writer_column.name
+                || reader_column.column_type != writer_column.column_type
+                || (!writer_column.nullable && reader_column.nullable)
+            {
+                return err;
+            }
         }
         return Ok(());
     }
