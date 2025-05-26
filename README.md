@@ -53,12 +53,12 @@ DB Mover ensures schema compatibility by comparing the table schemas from the re
 ### PostgreSQL
 
 | PostgreSQL                  | DB Mover    |
-| ----------                  | --------    |
+|-----------------------------|-------------|
 | varchar, text, bpchar       | String      |
 | bytea                       | Bytes       |
-| bigint                      | I64         |
-| integer                     | I32         |
-| smallint                    | I16         |
+| bigint, bigserial           | I64         |
+| integer, serial             | I32         |
+| smallint, smallserial       | I16         |
 | double precision            | F64         |
 | real                        | F32         |
 | boolean                     | Bool        |
@@ -76,9 +76,9 @@ SQLite uses [dynamic typing](https://www.sqlite.org/datatype3.html), so type map
 |-------------------------------------------------------------------|-------------|-----------------------------------------------------------------------------------|
 | character, varchar*, nvarchar*, char*, nchar*, clob, text, bpchar | String      | `*` - means zero or more chars in type name                                       |
 | bytea, blob                                                       | Bytes       |                                                                                   |
-| bigint                                                            | I64         |                                                                                   |
-| integer                                                           | I32         |                                                                                   |
-| tinyint, smallint                                                 | I16         |                                                                                   |
+| bigint, bigserial                                                 | I64         |                                                                                   |
+| integer, serial                                                   | I32         |                                                                                   |
+| tinyint, smallint, smallserial                                    | I16         |                                                                                   |
 | double, double precision, numeric, decimal                        | F64         |                                                                                   |
 | real, float                                                       | F32         |                                                                                   |
 | boolean, bool                                                     | Bool        |                                                                                   |

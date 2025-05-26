@@ -53,9 +53,9 @@ impl FromStr for ColumnType {
             return Ok(ColumnType::String);
         }
         return match foramted.as_str() {
-            "tinyint" | "smallint" => Ok(ColumnType::I16),
-            "integer" => Ok(ColumnType::I32),
-            "bigint" => Ok(ColumnType::I64),
+            "tinyint" | "smallint" | "smallserial" => Ok(ColumnType::I16),
+            "integer" | "serial" => Ok(ColumnType::I32),
+            "bigint" | "bigserial" => Ok(ColumnType::I64),
             "float" | "real" => Ok(ColumnType::F32),
             "double" | "double precision" | "numeric" | "decimal" => Ok(ColumnType::F64),
             "bool" | "boolean" => Ok(ColumnType::Bool),

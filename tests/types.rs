@@ -89,10 +89,15 @@ fn sqlite_types_compatability(
     assert_eq!(expected, result);
 }
 
+const POSTGRES_NULL_DISABLED_TYPES: [&'static str; 3] = ["smallserial", "serial", "bigserial"];
+
 #[rstest]
 #[case("bigint", "9223372036854775800", "9223372036854775800")]
 #[case("integer", "2147483647", "2147483647")]
 #[case("smallint", "32767", "32767")]
+#[case("smallserial", "32767", "32767")]
+#[case("serial", "2147483647", "2147483647")]
+#[case("bigserial", "9223372036854775807", "9223372036854775807")]
 #[case("real", "123.12345", "123.12345")]
 #[case("double precision", "123.12345678", "123.12345678")]
 #[case("bool", "true", "true")]
@@ -129,20 +134,23 @@ fn postgres_types_compatability(
     in_db.client.execute(&create_table_query, &[]).unwrap();
     out_db.client.execute(&create_table_query, &[]).unwrap();
 
-    in_db
-        .client
-        .execute("INSERT INTO test VALUES (NULL)", &[])
-        .unwrap();
+    let mut expected = vec![Some(expected.to_string())];
     let insert_query = format!("INSERT INTO test VALUES ({value})");
     in_db.client.execute(&insert_query, &[]).unwrap();
+
+    if !POSTGRES_NULL_DISABLED_TYPES.contains(&type_name) {
+        in_db
+            .client
+            .execute("INSERT INTO test VALUES (NULL)", &[])
+            .unwrap();
+        expected.push(None);
+    }
 
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
 
     db_mover::run(args.clone()).unwrap();
 
-    let mut expected = vec![None, Some(expected.to_string())];
-    expected.sort();
     let mut result: Vec<Option<String>> = out_db
         .client
         .query("SELECT CAST(field as TEXT) FROM test", &[])
@@ -150,6 +158,7 @@ fn postgres_types_compatability(
         .iter()
         .map(|row| row.get::<_, Option<String>>(0))
         .collect();
+    expected.sort();
     result.sort();
     assert_eq!(expected, result);
 }
