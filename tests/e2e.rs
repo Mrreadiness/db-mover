@@ -8,6 +8,7 @@ use common::testable_database::TestableDatabase;
 use pretty_assertions::{assert_eq, assert_ne};
 
 use rstest::rstest;
+use rstest_reuse::{self, *};
 
 fn create_test_tables(in_db: &mut impl TestableDatabase, out_db: &mut impl TestableDatabase) {
     in_db.create_test_table("test");
@@ -16,12 +17,16 @@ fn create_test_tables(in_db: &mut impl TestableDatabase, out_db: &mut impl Testa
     out_db.create_test_table("test1");
 }
 
+#[template]
 #[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn empty(#[case] mut in_db: impl TestableDatabase, #[case] mut out_db: impl TestableDatabase) {
+fn all_databases_combinations(
+    #[values(TestSqliteDatabase::new(), TestPostresDatabase::new())] in_db: impl TestableDatabase,
+    #[values(TestSqliteDatabase::new(), TestPostresDatabase::new())] out_db: impl TestableDatabase,
+) {
+}
+
+#[apply(all_databases_combinations)]
+fn empty(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     create_test_tables(&mut in_db, &mut out_db);
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
@@ -40,12 +45,8 @@ fn empty(#[case] mut in_db: impl TestableDatabase, #[case] mut out_db: impl Test
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 }
 
-#[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn one_table(#[case] mut in_db: impl TestableDatabase, #[case] mut out_db: impl TestableDatabase) {
+#[apply(all_databases_combinations)]
+fn one_table(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     create_test_tables(&mut in_db, &mut out_db);
     in_db.fill_test_table("test", 10);
     assert_ne!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
@@ -59,15 +60,8 @@ fn one_table(#[case] mut in_db: impl TestableDatabase, #[case] mut out_db: impl 
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 }
 
-#[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn multiple_tables(
-    #[case] mut in_db: impl TestableDatabase,
-    #[case] mut out_db: impl TestableDatabase,
-) {
+#[apply(all_databases_combinations)]
+fn multiple_tables(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     create_test_tables(&mut in_db, &mut out_db);
     in_db.fill_test_table("test", 10);
     in_db.fill_test_table("test1", 10);
@@ -83,15 +77,8 @@ fn multiple_tables(
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
 }
 
-#[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn in_table_not_found(
-    #[case] in_db: impl TestableDatabase,
-    #[case] mut out_db: impl TestableDatabase,
-) {
+#[apply(all_databases_combinations)]
+fn in_table_not_found(in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
     out_db.create_test_table("test");
@@ -99,15 +86,8 @@ fn in_table_not_found(
     assert!(db_mover::run(args.clone()).is_err());
 }
 
-#[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn out_table_not_found(
-    #[case] mut in_db: impl TestableDatabase,
-    #[case] out_db: impl TestableDatabase,
-) {
+#[apply(all_databases_combinations)]
+fn out_table_not_found(mut in_db: impl TestableDatabase, out_db: impl TestableDatabase) {
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
     in_db.create_test_table("test");
@@ -115,15 +95,8 @@ fn out_table_not_found(
     assert!(db_mover::run(args.clone()).is_err());
 }
 
-#[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn out_table_is_not_empty(
-    #[case] mut in_db: impl TestableDatabase,
-    #[case] mut out_db: impl TestableDatabase,
-) {
+#[apply(all_databases_combinations)]
+fn out_table_is_not_empty(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     create_test_tables(&mut in_db, &mut out_db);
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
     assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
@@ -136,15 +109,8 @@ fn out_table_is_not_empty(
     assert!(db_mover::run(args.clone()).is_err());
 }
 
-#[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn different_set_of_columnds(
-    #[case] mut in_db: impl TestableDatabase,
-    #[case] mut out_db: impl TestableDatabase,
-) {
+#[apply(all_databases_combinations)]
+fn different_set_of_columnds(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     create_test_tables(&mut in_db, &mut out_db);
     out_db.execute("ALTER TABLE test ADD COLUMN test_different_columns INTEGER");
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
@@ -159,15 +125,8 @@ fn different_set_of_columnds(
     );
 }
 
-#[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn nullable_to_non_nullable(
-    #[case] mut in_db: impl TestableDatabase,
-    #[case] mut out_db: impl TestableDatabase,
-) {
+#[apply(all_databases_combinations)]
+fn nullable_to_non_nullable(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     in_db.execute("CREATE TABLE test (test_different_columns INTEGER)");
     out_db.execute("CREATE TABLE test (test_different_columns INTEGER NOT NULL)");
     in_db.execute("INSERT INTO test VALUES (1)");
@@ -183,15 +142,8 @@ fn nullable_to_non_nullable(
     );
 }
 
-#[rstest]
-#[case(TestSqliteDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestPostresDatabase::new(), TestPostresDatabase::new())]
-#[case(TestPostresDatabase::new(), TestSqliteDatabase::new())]
-#[case(TestSqliteDatabase::new(), TestPostresDatabase::new())]
-fn non_nullable_to_nullable(
-    #[case] mut in_db: impl TestableDatabase,
-    #[case] mut out_db: impl TestableDatabase,
-) {
+#[apply(all_databases_combinations)]
+fn non_nullable_to_nullable(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     in_db.execute("CREATE TABLE test (test_different_columns INTEGER NOT NULL)");
     out_db.execute("CREATE TABLE test (test_different_columns INTEGER)");
     in_db.execute("INSERT INTO test VALUES (1)");
