@@ -153,6 +153,47 @@ fn non_nullable_to_nullable(mut in_db: impl TestableDatabase, mut out_db: impl T
     assert!(db_mover::run(args.clone()).is_ok());
 }
 
+#[apply(all_databases_combinations)]
+#[case("SMALLINT", "INTEGER", "1")]
+#[case("SMALLINT", "BIGINT", "1")]
+#[case("INTEGER", "BIGINT", "1")]
+fn safe_type_conversion(
+    mut in_db: impl TestableDatabase,
+    mut out_db: impl TestableDatabase,
+    #[case] in_type: &str,
+    #[case] out_type: &str,
+    #[case] value: &str,
+) {
+    in_db.execute(format!("CREATE TABLE test (value {in_type})"));
+    out_db.execute(format!("CREATE TABLE test (value {out_type})"));
+    in_db.execute(format!("INSERT INTO test VALUES ({value})"));
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+
+    assert!(db_mover::run(args.clone()).is_ok());
+
+    assert_eq!(
+        out_db.query_count(format!("SELECT count(1) FROM test WHERE value = {value}")),
+        1
+    );
+}
+
+#[apply(all_databases_combinations)]
+fn safe_type_conversion_float(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+    in_db.execute("CREATE TABLE test (value REAL)");
+    out_db.execute("CREATE TABLE test (value DOUBLE PRECISION)");
+    in_db.execute("INSERT INTO test VALUES (1.1)");
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+
+    assert!(db_mover::run(args.clone()).is_ok());
+
+    assert_eq!(
+        out_db.query_count("SELECT count(1) FROM test WHERE ABS(value - 1.1) < 0.0001"),
+        1
+    );
+}
+
 #[rstest]
 #[case("public", "test_schema")]
 #[case("test_schema", "public")]

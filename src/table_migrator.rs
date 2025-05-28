@@ -8,7 +8,7 @@ use crate::{
     args::Args,
     channel,
     databases::{
-        table::{Column, Row, TableInfo},
+        table::{Column, ColumnType, Row, TableInfo},
         traits::{DBReader, DBWriter},
     },
     progress::TableMigrationProgress,
@@ -119,9 +119,18 @@ impl TableMigrator {
         }
         for (reader_column, writer_column) in std::iter::zip(reader_columns, writer_columns) {
             if reader_column.name != writer_column.name
-                || reader_column.column_type != writer_column.column_type
                 || (!writer_column.nullable && reader_column.nullable)
             {
+                return err;
+            }
+            let allowed = matches!(
+                (reader_column.column_type, writer_column.column_type),
+                (ColumnType::I16, ColumnType::I32 | ColumnType::I64)
+                    | (ColumnType::I32, ColumnType::I64)
+                    | (ColumnType::F32, ColumnType::F64)
+            );
+
+            if !allowed && reader_column.column_type != writer_column.column_type {
                 return err;
             }
         }

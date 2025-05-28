@@ -52,42 +52,43 @@ DB Mover ensures schema compatibility by comparing the table schemas from the re
 
 ### PostgreSQL
 
-| PostgreSQL                  | DB Mover    |
-|-----------------------------|-------------|
-| varchar, text, bpchar       | String      |
-| bytea                       | Bytes       |
-| bigint, bigserial           | I64         |
-| integer, serial             | I32         |
-| smallint, smallserial       | I16         |
-| double precision            | F64         |
-| real                        | F32         |
-| boolean                     | Bool        |
-| timestamp with time zone    | Timestamptz |
-| timestamp without time zone | Timestamp   |
-| date                        | Date        |
-| time without time zone      | Time        |
-| UUID                        | Uuid        |
-| JSON, JSONB                 | Json        |
+| PostgreSQL                  | DB Mover      |
+|-----------------------------|---------------|
+| varchar, text, bpchar       | String        |
+| bytea                       | Bytes         |
+| bigint, bigserial           | I64           |
+| integer, serial             | I32, I64      |
+| smallint, smallserial       | I16, I32, I64 |
+| double precision            | F64           |
+| real                        | F32, F64      |
+| boolean                     | Bool          |
+| timestamp with time zone    | Timestamptz   |
+| timestamp without time zone | Timestamp     |
+| date                        | Date          |
+| time without time zone      | Time          |
+| UUID                        | Uuid          |
+| JSON, JSONB                 | Json          |
 
 ### SQLite
 
 SQLite uses [dynamic typing](https://www.sqlite.org/datatype3.html), so type mapping is based on the declared column type names. If an actual column value does not match the expected DB Mover type inferred from the column name, an error will be raised.
-| SQLite type name (case insensitive)                               | DB Mover    | Comment                                                                           |
-|-------------------------------------------------------------------|-------------|-----------------------------------------------------------------------------------|
-| character, varchar*, nvarchar*, char*, nchar*, clob, text, bpchar | String      | `*` - means zero or more chars in type name                                       |
-| bytea, blob                                                       | Bytes       |                                                                                   |
-| bigint, bigserial                                                 | I64         |                                                                                   |
-| integer, serial                                                   | I32         |                                                                                   |
-| tinyint, smallint, smallserial                                    | I16         |                                                                                   |
-| double, double precision, numeric, decimal                        | F64         |                                                                                   |
-| real, float                                                       | F32         |                                                                                   |
-| boolean, bool                                                     | Bool        |                                                                                   |
-| timestamptz                                                       | Timestamptz | RFC3339 ("YYYY-MM-DD HH:MM:SS.SSS+-HH:MM")                                        |
-| timestamp, datetime                                               | Timestamp   | ISO 8601 "YYYY-MM-DD HH:MM:SS"/"YYYY-MM-DD HH:MM:SS.SSS"                          |
-| date                                                              | Date        | "YYYY-MM-DD"                                                                      |
-| time                                                              | Time        | ISO 8601 time without timezone "HH:MM"/"HH:MM:SS"/"HH:MM:SS.SSS"                  |
-| uuid                                                              | Uuid        | 4 bytes blob                                                                      |
-| json, jsonb                                                       | Json        | [Rules](https://docs.rs/rusqlite/latest/src/rusqlite/types/serde_json.rs.html#31) |
+
+| SQLite type name (case insensitive)                               | DB Mover      | Comment                                                                           |
+|-------------------------------------------------------------------|---------------|-----------------------------------------------------------------------------------|
+| character, varchar*, nvarchar*, char*, nchar*, clob, text, bpchar | String        | `*` - means zero or more chars in type name                                       |
+| bytea, blob                                                       | Bytes         |                                                                                   |
+| bigint, bigserial                                                 | I64           |                                                                                   |
+| integer, serial                                                   | I32, I64      |                                                                                   |
+| tinyint, smallint, smallserial                                    | I16, I32, I64 |                                                                                   |
+| double, double precision, numeric, decimal                        | F64           |                                                                                   |
+| real, float                                                       | F32, F64      |                                                                                   |
+| boolean, bool                                                     | Bool          |                                                                                   |
+| timestamptz                                                       | Timestamptz   | RFC3339 ("YYYY-MM-DD HH:MM:SS.SSS+-HH:MM")                                        |
+| timestamp, datetime                                               | Timestamp     | ISO 8601 "YYYY-MM-DD HH:MM:SS"/"YYYY-MM-DD HH:MM:SS.SSS"                          |
+| date                                                              | Date          | "YYYY-MM-DD"                                                                      |
+| time                                                              | Time          | ISO 8601 time without timezone "HH:MM"/"HH:MM:SS"/"HH:MM:SS.SSS"                  |
+| uuid                                                              | Uuid          | 4 bytes blob                                                                      |
+| json, jsonb                                                       | Json          | [Rules](https://docs.rs/rusqlite/latest/src/rusqlite/types/serde_json.rs.html#31) |
 
 ## Development
 

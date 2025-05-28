@@ -38,8 +38,8 @@ impl TestableDatabase for TestSqliteDatabase {
         return URI::Sqlite(format!("sqlite://{}", self.path.to_str().unwrap()));
     }
 
-    fn execute(&mut self, query: &str) {
-        self.conn.execute(query, []).unwrap();
+    fn execute(&mut self, query: impl AsRef<str>) {
+        self.conn.execute(query.as_ref(), []).unwrap();
     }
 
     fn create_test_table(&mut self, table_name: &str) {
@@ -73,5 +73,10 @@ impl TestableDatabase for TestSqliteDatabase {
             rows.push(row.unwrap());
         }
         return rows;
+    }
+
+    fn query_count(&mut self, query: impl AsRef<str>) -> u32 {
+        let mut stmt = self.conn.prepare(query.as_ref()).unwrap();
+        return stmt.query_one([], |row| row.get(0)).unwrap();
     }
 }

@@ -11,6 +11,9 @@ use rstest::rstest;
 #[case("bigint", "9223372036854775800", "9223372036854775800")]
 #[case("integer", "2147483647", "2147483647")]
 #[case("smallint", "32767", "32767")]
+#[case("bigserial", "9223372036854775800", "9223372036854775800")]
+#[case("serial", "2147483647", "2147483647")]
+#[case("smallserial", "32767", "32767")]
 // Expected side effect of f32 to f64 conversion
 // while writing to the sqlite
 #[case("real", "123.12345", "123.12345123291")]

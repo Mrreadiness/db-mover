@@ -58,19 +58,41 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
 
     fn try_from(value: (ColumnType, &postgres::Row, usize)) -> Result<Self, Self::Error> {
         let (column_type, row, idx) = value;
+        let real_columnt_type = &row.columns()[idx];
         let value = match column_type {
-            ColumnType::I64 => row
-                .get::<_, Option<i64>>(idx)
-                .map_or(Value::Null, Value::I64),
-            ColumnType::I32 => row
-                .get::<_, Option<i32>>(idx)
-                .map_or(Value::Null, Value::I32),
+            ColumnType::I64 => {
+                if real_columnt_type.type_() == &Type::INT2 {
+                    row.get::<_, Option<i16>>(idx)
+                        .map_or(Value::Null, |val| Value::I64(val as i64))
+                } else if real_columnt_type.type_() == &Type::INT4 {
+                    row.get::<_, Option<i32>>(idx)
+                        .map_or(Value::Null, |val| Value::I64(val as i64))
+                } else {
+                    row.get::<_, Option<i64>>(idx)
+                        .map_or(Value::Null, Value::I64)
+                }
+            }
+            ColumnType::I32 => {
+                if real_columnt_type.type_() == &Type::INT2 {
+                    row.get::<_, Option<i16>>(idx)
+                        .map_or(Value::Null, |val| Value::I32(val as i32))
+                } else {
+                    row.get::<_, Option<i32>>(idx)
+                        .map_or(Value::Null, Value::I32)
+                }
+            }
             ColumnType::I16 => row
                 .get::<_, Option<i16>>(idx)
                 .map_or(Value::Null, Value::I16),
-            ColumnType::F64 => row
-                .get::<_, Option<f64>>(idx)
-                .map_or(Value::Null, Value::F64),
+            ColumnType::F64 => {
+                if real_columnt_type.type_() == &Type::FLOAT4 {
+                    row.get::<_, Option<f32>>(idx)
+                        .map_or(Value::Null, |val| Value::F64(val as f64))
+                } else {
+                    row.get::<_, Option<f64>>(idx)
+                        .map_or(Value::Null, Value::F64)
+                }
+            }
             ColumnType::F32 => row
                 .get::<_, Option<f32>>(idx)
                 .map_or(Value::Null, Value::F32),

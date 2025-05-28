@@ -63,8 +63,8 @@ impl TestableDatabase for TestPostresDatabase {
         return db_mover::uri::URI::Postgres(self.uri.clone());
     }
 
-    fn execute(&mut self, query: &str) {
-        self.client.execute(query, &[]).unwrap();
+    fn execute(&mut self, query: impl AsRef<str>) {
+        self.client.execute(query.as_ref(), &[]).unwrap();
     }
 
     fn create_test_table(&mut self, name: &str) {
@@ -114,5 +114,15 @@ impl TestableDatabase for TestPostresDatabase {
             .into_iter()
             .map(|row| row.into())
             .collect();
+    }
+
+    fn query_count(&mut self, query: impl AsRef<str>) -> u32 {
+        return self
+            .client
+            .query_one(query.as_ref(), &[])
+            .unwrap()
+            .get::<_, i64>(0)
+            .try_into()
+            .unwrap();
     }
 }
