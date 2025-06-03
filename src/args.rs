@@ -48,6 +48,10 @@ pub struct Args {
     /// Only for input table.
     #[clap(long, action)]
     pub no_count: bool,
+
+    /// Check compatibility without moving a data
+    #[clap(long, action)]
+    pub dry_run: bool,
 }
 
 impl Args {
@@ -63,6 +67,7 @@ impl Args {
             quiet: true,
             log_level: Level::INFO,
             no_count: false,
+            dry_run: false,
         };
     }
 }

@@ -14,8 +14,10 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
         let writer = args.output.create_writer()?;
         info!("Processing table {table}");
         let migrator = table_migrator::TableMigrator::new(reader, writer, table, (&args).into())?;
-        migrator.run()?;
-        info!("Table {table} moved");
+        if !args.dry_run {
+            migrator.run()?;
+            info!("Table {table} moved");
+        }
     }
     return Ok(());
 }

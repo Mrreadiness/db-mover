@@ -288,3 +288,27 @@ fn postgres_retry_reconnect() {
 
     assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
 }
+
+#[apply(all_databases_combinations)]
+fn dry_run(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+    create_test_tables(&mut in_db, &mut out_db);
+    in_db.fill_test_table("test", 10);
+
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+    args.dry_run = true;
+    db_mover::run(args).unwrap();
+
+    assert_eq!(out_db.get_all_rows("test").len(), 0);
+}
+
+#[apply(all_databases_combinations)]
+fn dry_run_err(mut in_db: impl TestableDatabase, out_db: impl TestableDatabase) {
+    in_db.create_test_table("test");
+    in_db.fill_test_table("test", 10);
+
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+    args.dry_run = true;
+    assert!(db_mover::run(args.clone()).is_err());
+}

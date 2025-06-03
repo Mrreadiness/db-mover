@@ -72,6 +72,7 @@ impl TableMigrator {
             .get_table_info(table, false)
             .context("Unable to get information about destination table")?;
         Self::check_table_compatibility(&reader_table_info, &writer_table_info)?;
+        info!("Table {table} has passed compatability checks");
         let mut writers = Vec::new();
         if settings.writer_workers > 1 {
             for _ in 0..settings.writer_workers {

@@ -185,7 +185,9 @@ impl TableMigrationProgress {
 
 impl Drop for TableMigrationProgress {
     fn drop(&mut self) {
-        self.log();
+        if self.reader.current() > 0 || self.writer.current() > 0 {
+            self.log();
+        }
     }
 }
 
