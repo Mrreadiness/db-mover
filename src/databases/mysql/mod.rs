@@ -72,7 +72,9 @@ impl DBInfoProvider for MysqlDB {
             );
         }
 
-        let info_rows: Vec<mysql::Row> = self.connection.query(format!("SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '{table}'"))?;
+        let info_rows: Vec<mysql::Row> = self.connection.query(format!(r"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE 
+                                                                         FROM INFORMATION_SCHEMA.COLUMNS 
+                                                                         WHERE table_name = '{table}' AND TABLE_SCHEMA = database()"))?;
         let mut columns = Vec::with_capacity(info_rows.len());
         for row in info_rows {
             columns.push(Column::try_from(row)?);

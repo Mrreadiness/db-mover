@@ -1,37 +1,54 @@
+use std::sync::LazyLock;
+
 use fake::{Fake, Faker};
 use testcontainers::{Container, ImageExt, runners::SyncRunner};
 
 use postgres::{Client, NoTls};
 
-use super::{row::TestRow, testable_database::TestableDatabase};
+use super::{
+    gen_database_name, rm_container_by_name, row::TestRow, testable_database::TestableDatabase,
+};
 
 pub struct TestPostresDatabase {
     pub uri: String,
     pub client: Client,
-    container: Container<testcontainers_modules::postgres::Postgres>,
 }
+
+static POSTGRES_CONTAINER: LazyLock<Container<testcontainers_modules::postgres::Postgres>> =
+    LazyLock::new(|| {
+        let name = "db_mover_tests_postgres";
+        rm_container_by_name(name);
+
+        testcontainers_modules::postgres::Postgres::default()
+            .with_tag("17-alpine")
+            .with_container_name(name)
+            .start()
+            .unwrap()
+    });
 
 impl TestPostresDatabase {
     pub fn new() -> Self {
-        let container = testcontainers_modules::postgres::Postgres::default()
-            .with_tag("17-alpine")
-            .start()
-            .unwrap();
-
-        let uri = format!(
+        let base_uri = format!(
             "postgres://postgres:postgres@{}:{}/postgres",
-            container.get_host().unwrap(),
-            container.get_host_port_ipv4(5432).unwrap(),
+            POSTGRES_CONTAINER.get_host().unwrap(),
+            POSTGRES_CONTAINER.get_host_port_ipv4(5432).unwrap(),
         );
 
+        let mut base_client = Client::connect(&base_uri, NoTls)
+            .expect("Unable to connect to the database created for tests");
+        let new_db_name = gen_database_name();
+        let create_db_query = format!("CREATE DATABASE {new_db_name}");
+        base_client.execute(&create_db_query, &[]).unwrap();
+
+        let uri = format!(
+            "postgres://postgres:postgres@{}:{}/{new_db_name}",
+            POSTGRES_CONTAINER.get_host().unwrap(),
+            POSTGRES_CONTAINER.get_host_port_ipv4(5432).unwrap(),
+        );
         let client = Client::connect(&uri, NoTls)
             .expect("Unable to connect to the database created for tests");
 
-        return Self {
-            uri,
-            client,
-            container,
-        };
+        return Self { uri, client };
     }
 
     pub fn new_client(&self) -> Client {

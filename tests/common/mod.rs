@@ -21,3 +21,9 @@ fn gen_database_name() -> String {
             .collect::<String>()
     );
 }
+
+fn rm_container_by_name(name: &str) {
+    let _ = std::process::Command::new("docker")
+        .args(&["rm", "-f", name])
+        .status();
+}

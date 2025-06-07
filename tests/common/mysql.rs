@@ -1,35 +1,53 @@
+use std::sync::LazyLock;
+
 use fake::{Fake, Faker};
-use testcontainers::{Container, runners::SyncRunner};
+use testcontainers::{Container, ImageExt, runners::SyncRunner};
 
 use mysql::{Conn, Opts, TxOpts, params, prelude::Queryable};
 
-use super::{row::TestRow, testable_database::TestableDatabase};
+use super::{
+    gen_database_name, rm_container_by_name, row::TestRow, testable_database::TestableDatabase,
+};
+
+static MYSQL_CONTAINER: LazyLock<Container<testcontainers_modules::mysql::Mysql>> =
+    LazyLock::new(|| {
+        let name = "db_mover_tests_mysql";
+        rm_container_by_name(name);
+        testcontainers_modules::mysql::Mysql::default()
+            .with_container_name(name)
+            .start()
+            .unwrap()
+    });
 
 pub struct TestMysqlDatabase {
     pub uri: String,
     pub connection: Conn,
-    container: Container<testcontainers_modules::mysql::Mysql>,
 }
 
 impl TestMysqlDatabase {
     pub fn new() -> Self {
-        let container = testcontainers_modules::mysql::Mysql::default()
-            .start()
+        let container = &MYSQL_CONTAINER;
+
+        let new_db_name = gen_database_name();
+        let base_uri = format!(
+            "mysql://root@{}:{}/test",
+            container.get_host().unwrap(),
+            container.get_host_port_ipv4(3306).unwrap(),
+        );
+        let mut base_connection = Conn::new(Opts::from_url(&base_uri).unwrap()).unwrap();
+        base_connection
+            .query_drop(format!("CREATE DATABASE {new_db_name}"))
             .unwrap();
 
         let uri = format!(
-            "mysql://root@{}:{}/test",
+            "mysql://root@{}:{}/{new_db_name}",
             container.get_host().unwrap(),
             container.get_host_port_ipv4(3306).unwrap(),
         );
         let opts = Opts::from_url(&uri).unwrap();
         let connection = Conn::new(opts).unwrap();
 
-        return Self {
-            uri,
-            connection,
-            container,
-        };
+        return Self { uri, connection };
     }
 }
 
