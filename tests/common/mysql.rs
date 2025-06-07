@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::sync::LazyLock;
 
 use fake::{Fake, Faker};
@@ -81,16 +82,16 @@ impl TestableDatabase for TestMysqlDatabase {
             row.id = i as i64;
             rows.push(row);
         }
-        for chunk in rows.chunks(100) {
-            trx.exec_batch( // TODO: optimize
+        for chunk in rows.into_iter().chunks(100).into_iter() {
+            trx.exec_batch(
                 format!("INSERT INTO {name} VALUES (:id, :real_field, :text_field, :blob_field, :timestamp_field)"),
-                chunk.into_iter().map(|row| {
+                chunk.map(|row| {
                     params! {
                         "id" => row.id,
                         "real_field" => row.real,
-                        "text_field" => row.text.clone(),
-                        "blob_field" => row.blob.clone(),
-                        "timestamp_field" => row.timestamp.clone(),
+                        "text_field" => row.text,
+                        "blob_field" => row.blob,
+                        "timestamp_field" => row.timestamp,
                     }
                 }),
             )
