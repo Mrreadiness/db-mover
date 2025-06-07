@@ -44,7 +44,7 @@ impl TestableDatabase for TestSqliteDatabase {
 
     fn create_test_table(&mut self, table_name: &str) {
         let query = format!(
-            "CREATE TABLE {table_name} (id BIGINT PRIMARY KEY NOT NULL, real REAL, text TEXT, blob BLOB, timestamp DATETIME)"
+            "CREATE TABLE {table_name} (id BIGINT PRIMARY KEY NOT NULL, real_field REAL, text_field TEXT, blob_field BLOB, timestamp_field DATETIME)"
         );
         self.conn.execute(&query, []).unwrap();
     }

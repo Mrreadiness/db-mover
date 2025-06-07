@@ -54,7 +54,7 @@ impl FromStr for ColumnType {
         }
         return match foramted.as_str() {
             "tinyint" | "smallint" | "smallserial" => Ok(ColumnType::I16),
-            "integer" | "serial" => Ok(ColumnType::I32),
+            "integer" | "serial" | "int" => Ok(ColumnType::I32),
             "bigint" | "bigserial" => Ok(ColumnType::I64),
             "float" | "real" => Ok(ColumnType::F32),
             "double" | "double precision" | "numeric" | "decimal" => Ok(ColumnType::F64),

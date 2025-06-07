@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+pub mod mysql;
 pub mod postgres;
 pub mod row;
 pub mod sqlite;
