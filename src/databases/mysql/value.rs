@@ -1,3 +1,5 @@
+use chrono::{NaiveDateTime, TimeZone, Utc};
+
 use crate::databases::table::{Column, ColumnType, Value};
 
 impl TryFrom<(&Column, mysql::Value)> for Value {
@@ -18,12 +20,14 @@ impl TryFrom<(&Column, mysql::Value)> for Value {
             ColumnType::String => Value::String(mysql::from_value_opt(val)?),
             ColumnType::Bytes => Value::Bytes(mysql::from_value_opt(val)?),
             ColumnType::Timestamp => Value::Timestamp(mysql::from_value_opt(val)?),
-            _ => return Err(anyhow::anyhow!("Unsupported mysql type")),
-            // ColumnType::Timestamptz => Value::Timestamptz(FromSql::column_result(val)?),
-            // ColumnType::Date => Value::Date(FromSql::column_result(val)?),
-            // ColumnType::Time => Value::Time(FromSql::column_result(val)?),
-            // ColumnType::Json => Value::Json(FromSql::column_result(val)?),
-            // ColumnType::Uuid => Value::Uuid(FromSql::column_result(val)?),
+            ColumnType::Timestamptz => {
+                let dt: NaiveDateTime = mysql::from_value_opt(val)?;
+                Value::Timestamptz(Utc.from_utc_datetime(&dt)) // UTC timezone set on connection
+            }
+            ColumnType::Date => Value::Date(mysql::from_value_opt(val)?),
+            ColumnType::Time => Value::Time(mysql::from_value_opt(val)?),
+            ColumnType::Json => Value::Json(mysql::from_value_opt(val)?),
+            ColumnType::Uuid => Value::Uuid(mysql::from_value_opt(val)?),
         };
         return Ok(parsed);
     }

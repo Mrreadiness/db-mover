@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use mysql::prelude::Queryable;
-use mysql::{Conn, Opts};
+use mysql::{Conn, Opts, params};
 use tracing::debug;
 
 use crate::databases::table::{Row, Value};
@@ -24,9 +24,12 @@ impl MysqlDB {
         return Ok(Self { connection });
     }
 
-    fn connect(uri: &str) -> Result<Conn, mysql::Error> {
+    fn connect(uri: &str) -> Result<Conn, anyhow::Error> {
         let opts = Opts::from_url(uri)?;
-        return Conn::new(opts);
+        let mut conn = Conn::new(opts)?;
+        conn.query_drop("SET time_zone = 'UTC'")
+            .context("Failed to set UTC timezone")?;
+        return Ok(conn);
     }
 
     fn get_num_rows(&mut self, table: &str) -> anyhow::Result<u64> {
@@ -72,9 +75,9 @@ impl DBInfoProvider for MysqlDB {
             );
         }
 
-        let info_rows: Vec<mysql::Row> = self.connection.query(format!(r"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE 
-                                                                         FROM INFORMATION_SCHEMA.COLUMNS 
-                                                                         WHERE table_name = '{table}' AND TABLE_SCHEMA = database()"))?;
+        let info_rows: Vec<mysql::Row> = self.connection.exec(r"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE 
+                                                                FROM INFORMATION_SCHEMA.COLUMNS 
+                                                                WHERE table_name = :table AND TABLE_SCHEMA = database()", params! {table})?;
         let mut columns = Vec::with_capacity(info_rows.len());
         for row in info_rows {
             columns.push(Column::try_from(row)?);
