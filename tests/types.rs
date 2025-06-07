@@ -1,8 +1,10 @@
 mod common;
 
+use common::mysql::TestMysqlDatabase;
 use common::postgres::TestPostresDatabase;
 use common::sqlite::TestSqliteDatabase;
 use common::testable_database::TestableDatabase;
+use mysql::prelude::Queryable;
 use pretty_assertions::assert_eq;
 
 use rstest::rstest;
@@ -161,6 +163,68 @@ fn postgres_types_compatability(
         .iter()
         .map(|row| row.get::<_, Option<String>>(0))
         .collect();
+    expected.sort();
+    result.sort();
+    assert_eq!(expected, result);
+}
+
+// TODO: FLOAT(M), FLOAT(M, D) and others
+// TODO: UUID
+// TODO: DATETIME years before 1970
+#[rstest]
+#[case("bigint", "9223372036854775800", "9223372036854775800")]
+#[case("integer", "2147483647", "2147483647")]
+#[case("int", "2147483647", "2147483647")]
+#[case("smallint", "32767", "32767")]
+#[case("tinyint", "127", "127")]
+#[case("float", "123.123", "123.123")]
+#[case("real", "123.12345", "123.12345")]
+#[case("double precision", "123.12345678", "123.12345678")]
+#[case("bool", "true", "1")]
+#[case("varchar(10)", "'test'", "test")]
+#[case("char(10)", "'test'", "test")]
+#[case("text", "'test'", "test")]
+#[case("blob", "'test'", "test")]
+#[case("timestamp", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
+#[case("datetime", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
+#[case("date", "'2004-10-19'", "2004-10-19")]
+#[case("time", "'10:23:54'", "10:23:54")]
+#[case("json", r#"'{"test": 1}'"#, r#"{"test": 1}"#)]
+#[case(
+    "json",
+    r#"'[{"test": 1}, {"test": 2}]'"#,
+    r#"[{"test": 1}, {"test": 2}]"#
+)]
+fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[case] expected: &str) {
+    let mut in_db = TestMysqlDatabase::new();
+    let mut out_db = TestMysqlDatabase::new();
+    let create_table_query = format!("CREATE TABLE test (field {type_name})");
+    in_db.connection.query_drop(&create_table_query).unwrap();
+    out_db.connection.query_drop(&create_table_query).unwrap();
+
+    let mut expected = vec![Some(expected.to_string())];
+    in_db
+        .connection
+        .query_drop(format!("INSERT INTO test VALUES ({value})"))
+        .unwrap();
+
+    in_db
+        .connection
+        .query_drop("INSERT INTO test VALUES (NULL)")
+        .unwrap();
+    expected.push(None);
+
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+
+    db_mover::run(args.clone()).unwrap();
+
+    let mut result = out_db
+        .connection
+        .query_map("SELECT CAST(field as CHAR) FROM test", |row: mysql::Row| {
+            row.get::<Option<String>, _>(0).unwrap()
+        })
+        .unwrap();
     expected.sort();
     result.sort();
     assert_eq!(expected, result);
