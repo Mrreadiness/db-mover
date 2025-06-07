@@ -32,3 +32,25 @@ impl TryFrom<(&Column, mysql::Value)> for Value {
         return Ok(parsed);
     }
 }
+
+impl From<&Value> for mysql::Value {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::Null => mysql::Value::NULL,
+            Value::I64(val) => val.into(),
+            Value::I32(val) => val.into(),
+            Value::I16(val) => val.into(),
+            Value::F64(val) => val.into(),
+            Value::F32(val) => val.into(),
+            Value::Bool(val) => val.into(),
+            Value::String(val) => val.into(),
+            Value::Bytes(val) => val.into(),
+            Value::Timestamptz(val) => val.naive_utc().into(),
+            Value::Timestamp(val) => val.into(),
+            Value::Date(val) => val.into(),
+            Value::Time(val) => val.into(),
+            Value::Json(val) => val.into(),
+            Value::Uuid(val) => val.into(),
+        }
+    }
+}

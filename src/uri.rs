@@ -38,7 +38,9 @@ impl URI {
             URI::Postgres(uri) => {
                 Box::new(PostgresDB::new(uri).context("Unable to connect to the postgres")?)
             }
-            URI::Mysql(_uri) => return Err(anyhow::anyhow!("Mysql writer is not supported")),
+            URI::Mysql(uri) => {
+                Box::new(MysqlDB::new(uri).context("Unable to connect to the mysql")?)
+            }
         };
         return Ok(writer);
     }

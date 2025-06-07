@@ -5,6 +5,8 @@ pub mod row;
 pub mod sqlite;
 pub mod testable_database;
 
+use std::process::Stdio;
+
 use rand::distr::{Distribution, slice::Choose};
 
 fn gen_database_name() -> String {
@@ -24,6 +26,8 @@ fn gen_database_name() -> String {
 
 fn rm_container_by_name(name: &str) {
     let _ = std::process::Command::new("docker")
-        .args(&["rm", "-f", name])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .args(&["rm", "-f", "-v", name])
         .status();
 }

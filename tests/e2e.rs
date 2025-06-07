@@ -27,7 +27,12 @@ fn all_databases_combinations(
         TestMysqlDatabase::new()
     )]
     in_db: impl TestableDatabase,
-    #[values(TestSqliteDatabase::new(), TestPostresDatabase::new())] out_db: impl TestableDatabase,
+    #[values(
+        TestSqliteDatabase::new(),
+        TestPostresDatabase::new(),
+        TestMysqlDatabase::new()
+    )]
+    out_db: impl TestableDatabase,
 ) {
 }
 
