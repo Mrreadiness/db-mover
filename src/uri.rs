@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Context;
 
+use crate::databases::mysql::MysqlDB;
 use crate::databases::postgres::PostgresDB;
 use crate::databases::sqlite::SqliteDB;
 use crate::databases::traits::{DBReader, DBWriter};
@@ -10,6 +11,7 @@ use crate::databases::traits::{DBReader, DBWriter};
 pub enum URI {
     Sqlite(String),
     Postgres(String),
+    Mysql(String),
 }
 
 impl URI {
@@ -20,6 +22,9 @@ impl URI {
             }
             URI::Postgres(uri) => {
                 Box::new(PostgresDB::new(uri).context("Unable to connect to the postgres")?)
+            }
+            URI::Mysql(uri) => {
+                Box::new(MysqlDB::new(uri).context("Unable to connect to the mysql")?)
             }
         };
         return Ok(reader);
@@ -33,6 +38,7 @@ impl URI {
             URI::Postgres(uri) => {
                 Box::new(PostgresDB::new(uri).context("Unable to connect to the postgres")?)
             }
+            URI::Mysql(_uri) => return Err(anyhow::anyhow!("Mysql writer is not supported")),
         };
         return Ok(writer);
     }
@@ -47,6 +53,9 @@ impl FromStr for URI {
         }
         if s.starts_with("postgres://") || s.starts_with("postgresql://") {
             return Ok(URI::Postgres(s.to_owned()));
+        }
+        if s.starts_with("mysql://") {
+            return Ok(URI::Mysql(s.to_owned()));
         }
         return Err("Unknown URI format".to_string());
     }
@@ -66,6 +75,12 @@ mod tests {
     fn test_uri_from_str_postgres() {
         let uri = URI::from_str("postgres://user:pass@localhost/db");
         assert!(matches!(uri, Ok(URI::Postgres(_))));
+    }
+
+    #[test]
+    fn test_uri_from_str_mysql() {
+        let uri = URI::from_str("mysql://user@localhost:3306");
+        assert!(matches!(uri, Ok(URI::Mysql(_))));
     }
 
     #[test]

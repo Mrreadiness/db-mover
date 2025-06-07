@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+pub mod mysql;
 pub mod postgres;
 pub mod row;
 pub mod sqlite;
@@ -19,4 +20,10 @@ fn gen_database_name() -> String {
             .take(10)
             .collect::<String>()
     );
+}
+
+fn rm_container_by_name(name: &str) {
+    let _ = std::process::Command::new("docker")
+        .args(&["rm", "-f", name])
+        .status();
 }

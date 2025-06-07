@@ -2,6 +2,7 @@ mod common;
 
 use std::{thread::sleep, time::Duration};
 
+use common::mysql::TestMysqlDatabase;
 use common::postgres::TestPostresDatabase;
 use common::sqlite::TestSqliteDatabase;
 use common::testable_database::TestableDatabase;
@@ -20,7 +21,12 @@ fn create_test_tables(in_db: &mut impl TestableDatabase, out_db: &mut impl Testa
 #[template]
 #[rstest]
 fn all_databases_combinations(
-    #[values(TestSqliteDatabase::new(), TestPostresDatabase::new())] in_db: impl TestableDatabase,
+    #[values(
+        TestSqliteDatabase::new(),
+        TestPostresDatabase::new(),
+        TestMysqlDatabase::new()
+    )]
+    in_db: impl TestableDatabase,
     #[values(TestSqliteDatabase::new(), TestPostresDatabase::new())] out_db: impl TestableDatabase,
 ) {
 }
@@ -116,12 +122,14 @@ fn different_set_of_columnds(mut in_db: impl TestableDatabase, mut out_db: impl 
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
 
-    assert!(db_mover::run(args.clone()).is_err());
+    let result = db_mover::run(args.clone());
+    assert!(result.is_err());
+    let err = result.unwrap_err();
     assert!(
-        db_mover::run(args.clone())
-            .unwrap_err()
-            .to_string()
-            .contains("Incompatable set of columns for table test")
+        err.to_string()
+            .contains("Incompatable set of columns for table test"),
+        "{:?}",
+        err,
     );
 }
 
@@ -133,12 +141,14 @@ fn nullable_to_non_nullable(mut in_db: impl TestableDatabase, mut out_db: impl T
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
 
-    assert!(db_mover::run(args.clone()).is_err());
+    let result = db_mover::run(args.clone());
+    assert!(result.is_err());
+    let err = result.unwrap_err();
     assert!(
-        db_mover::run(args.clone())
-            .unwrap_err()
-            .to_string()
-            .contains("Incompatable set of columns for table test")
+        err.to_string()
+            .contains("Incompatable set of columns for table test"),
+        "{:?}",
+        err,
     );
 }
 
@@ -150,7 +160,8 @@ fn non_nullable_to_nullable(mut in_db: impl TestableDatabase, mut out_db: impl T
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
 
-    assert!(db_mover::run(args.clone()).is_ok());
+    let result = db_mover::run(args.clone());
+    assert!(result.is_ok(), "{:?}", result.unwrap_err());
 }
 
 #[apply(all_databases_combinations)]
@@ -170,7 +181,8 @@ fn safe_type_conversion(
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
 
-    assert!(db_mover::run(args.clone()).is_ok());
+    let result = db_mover::run(args.clone());
+    assert!(result.is_ok(), "{:?}", result.unwrap_err());
 
     assert_eq!(
         out_db.query_count(format!("SELECT count(1) FROM test WHERE value = {value}")),
@@ -186,7 +198,8 @@ fn safe_type_conversion_float(mut in_db: impl TestableDatabase, mut out_db: impl
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
 
-    assert!(db_mover::run(args.clone()).is_ok());
+    let result = db_mover::run(args.clone());
+    assert!(result.is_ok(), "{:?}", result.unwrap_err());
 
     assert_eq!(
         out_db.query_count("SELECT count(1) FROM test WHERE ABS(value - 1.1) < 0.0001"),

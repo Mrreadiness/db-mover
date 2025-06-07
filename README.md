@@ -100,7 +100,7 @@ cargo build --release
 ```
 
 ### Tests
-Docker required.
+Docker required. After end of tests some containers might be still alive, remove them manually.
 
 Run tests:
 ```bash
