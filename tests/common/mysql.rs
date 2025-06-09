@@ -63,7 +63,7 @@ impl TestableDatabase for TestMysqlDatabase {
 
     fn create_test_table(&mut self, name: &str) {
         let query = format!(
-            "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real_field FLOAT, text_field TEXT, blob_field BLOB, timestamp_field TIMESTAMP)"
+            "CREATE TABLE {name} (id BIGINT PRIMARY KEY, real_field FLOAT, text_field TEXT, blob_field BLOB, timestamp_field DATETIME)"
         );
         self.connection
             .query_drop(&query)

@@ -80,7 +80,7 @@ SQLite uses [dynamic typing](https://www.sqlite.org/datatype3.html), so type map
 | bigint, bigserial                                                 | I64           |                                                                                   |
 | integer, serial                                                   | I32, I64      |                                                                                   |
 | tinyint, smallint, smallserial                                    | I16, I32, I64 |                                                                                   |
-| double, double precision, numeric, decimal                        | F64           |                                                                                   |
+| double, double precision                                          | F64           |                                                                                   |
 | real, float                                                       | F32, F64      |                                                                                   |
 | boolean, bool                                                     | Bool          |                                                                                   |
 | timestamptz                                                       | Timestamptz   | RFC3339 ("YYYY-MM-DD HH:MM:SS.SSS+-HH:MM")                                        |

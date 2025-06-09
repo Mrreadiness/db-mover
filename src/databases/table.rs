@@ -44,20 +44,20 @@ impl FromStr for ColumnType {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<ColumnType, Self::Err> {
-        let foramted = s.trim().to_lowercase();
-        if foramted.starts_with("varchar")
-            | foramted.starts_with("nvarchar")
-            | foramted.starts_with("nchar")
-            | foramted.starts_with("char")
+        let formated = s.trim().to_lowercase();
+        if formated.starts_with("varchar")
+            || formated.starts_with("nvarchar")
+            || formated.starts_with("nchar")
+            || formated.starts_with("char")
         {
             return Ok(ColumnType::String);
         }
-        return match foramted.as_str() {
+        return match formated.as_str() {
             "tinyint" | "smallint" | "smallserial" => Ok(ColumnType::I16),
             "integer" | "serial" | "int" => Ok(ColumnType::I32),
             "bigint" | "bigserial" => Ok(ColumnType::I64),
             "float" | "real" => Ok(ColumnType::F32),
-            "double" | "double precision" | "numeric" | "decimal" => Ok(ColumnType::F64),
+            "double" | "double precision" => Ok(ColumnType::F64),
             "bool" | "boolean" => Ok(ColumnType::Bool),
             "character" | "varchar" | "nvarchar" | "char" | "nchar" | "clob" | "text"
             | "bpchar" => Ok(ColumnType::String),

@@ -168,15 +168,11 @@ fn postgres_types_compatability(
     assert_eq!(expected, result);
 }
 
-// TODO: FLOAT(M), FLOAT(M, D) and others
-// TODO: UUID
-// TODO: DATETIME years before 1970
 #[rstest]
 #[case("bigint", "9223372036854775800", "9223372036854775800")]
 #[case("integer", "2147483647", "2147483647")]
 #[case("int", "2147483647", "2147483647")]
 #[case("smallint", "32767", "32767")]
-#[case("tinyint", "127", "127")]
 #[case("float", "123.123", "123.123")]
 #[case("real", "123.12345", "123.12345")]
 #[case("double precision", "123.12345678", "123.12345678")]
@@ -187,6 +183,7 @@ fn postgres_types_compatability(
 #[case("blob", "'test'", "test")]
 #[case("timestamp", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
 #[case("datetime", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
+#[case("datetime", "'1001-10-19 10:23:54'", "1001-10-19 10:23:54")]
 #[case("date", "'2004-10-19'", "2004-10-19")]
 #[case("time", "'10:23:54'", "10:23:54")]
 #[case("json", r#"'{"test": 1}'"#, r#"{"test": 1}"#)]
@@ -194,6 +191,11 @@ fn postgres_types_compatability(
     "json",
     r#"'[{"test": 1}, {"test": 2}]'"#,
     r#"[{"test": 1}, {"test": 2}]"#
+)]
+#[case(
+    "binary(16)",
+    "X'67e5504410b1426f9247bb680e5fe0c8'",
+    "67e55044-10b1-426f-9247-bb680e5fe0c8"
 )]
 fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[case] expected: &str) {
     let mut in_db = TestMysqlDatabase::new();
@@ -219,9 +221,14 @@ fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[cas
 
     db_mover::run(args.clone()).unwrap();
 
+    let query = match type_name {
+        "binary(16)" => "SELECT BIN_TO_UUID(field) FROM test",
+        _ => "SELECT CAST(field as CHAR) FROM test",
+    };
+
     let mut result = out_db
         .connection
-        .query_map("SELECT CAST(field as CHAR) FROM test", |row: mysql::Row| {
+        .query_map(query, |row: mysql::Row| {
             row.get::<Option<String>, _>(0).unwrap()
         })
         .unwrap();

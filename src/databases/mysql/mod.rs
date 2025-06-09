@@ -1,9 +1,8 @@
-use std::str::FromStr;
-
 use anyhow::Context;
 use mysql::prelude::Queryable;
 use mysql::{Conn, Opts, TxOpts, params};
 use tracing::debug;
+use value::MysqlTypeOptions;
 
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader};
@@ -16,6 +15,7 @@ mod value;
 pub struct MysqlDB {
     uri: String,
     connection: Conn,
+    type_options: MysqlTypeOptions,
 }
 
 impl MysqlDB {
@@ -25,6 +25,7 @@ impl MysqlDB {
         return Ok(Self {
             uri: uri.to_string(),
             connection,
+            type_options: MysqlTypeOptions::default(),
         });
     }
 
@@ -61,9 +62,10 @@ impl TryFrom<mysql::Row> for Column {
             .get_opt(2)
             .context("Value expected")?
             .context("Couldn't parse column nullable")?;
+        let options = MysqlTypeOptions::default();
         return Ok(Column {
             name,
-            column_type: ColumnType::from_str(&column_type)?, // TODO: mysql specific
+            column_type: ColumnType::try_from_mysql_type(&column_type, &options)?,
             nullable: nullable.as_str() == "YES",
         });
     }
@@ -85,7 +87,23 @@ impl DBInfoProvider for MysqlDB {
                                                                 ORDER BY ORDINAL_POSITION", params! {table})?;
         let mut columns = Vec::with_capacity(info_rows.len());
         for row in info_rows {
-            columns.push(Column::try_from(row)?);
+            let name = row
+                .get_opt(0)
+                .context("Value expected")?
+                .context("Couldn't parse column name")?;
+            let column_type: String = row
+                .get_opt(1)
+                .context("Value expected")?
+                .context("Couldn't parse column type")?;
+            let nullable: String = row
+                .get_opt(2)
+                .context("Value expected")?
+                .context("Couldn't parse column nullable")?;
+            columns.push(Column {
+                name,
+                column_type: ColumnType::try_from_mysql_type(&column_type, &self.type_options)?,
+                nullable: nullable.as_str() == "YES",
+            });
         }
 
         return Ok(TableInfo {
