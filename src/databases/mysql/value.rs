@@ -38,7 +38,7 @@ impl ColumnType {
         return match formated.as_str() {
             "smallint" => Ok(ColumnType::I16),
             "integer" | "int" => Ok(ColumnType::I32),
-            "bigint" | "serial" => Ok(ColumnType::I64),
+            "bigint" => Ok(ColumnType::I64),
             "float" => Ok(ColumnType::F32),
             "double" | "real" | "double precision" => Ok(ColumnType::F64),
             "bool" | "boolean" => Ok(ColumnType::Bool),

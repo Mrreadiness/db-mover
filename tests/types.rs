@@ -168,6 +168,9 @@ fn postgres_types_compatability(
     assert_eq!(expected, result);
 }
 
+const MYSQL_BYTES_IN: &'static str = "CAST('Hello World' AS BINARY)";
+const MYSQL_BYTES_EXPECTED: &'static str = "Hello World";
+
 #[rstest]
 #[case("bigint", "9223372036854775800", "9223372036854775800")]
 #[case("integer", "2147483647", "2147483647")]
@@ -176,11 +179,16 @@ fn postgres_types_compatability(
 #[case("float", "123.123", "123.123")]
 #[case("real", "123.12345", "123.12345")]
 #[case("double precision", "123.12345678", "123.12345678")]
+#[case("double", "123.12345678", "123.12345678")]
 #[case("bool", "true", "1")]
+#[case("boolean", "true", "1")]
+#[case("tinyint(1)", "true", "1")]
 #[case("varchar(10)", "'test'", "test")]
 #[case("char(10)", "'test'", "test")]
+#[case("tinytext", "'test'", "test")]
 #[case("text", "'test'", "test")]
-#[case("blob", "'test'", "test")]
+#[case("mediumtext", "'test'", "test")]
+#[case("longtext", "'test'", "test")]
 #[case("timestamp", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
 #[case("datetime", "'2004-10-19 10:23:54'", "2004-10-19 10:23:54")]
 #[case("datetime", "'1001-10-19 10:23:54'", "1001-10-19 10:23:54")]
@@ -192,7 +200,12 @@ fn postgres_types_compatability(
     r#"'[{"test": 1}, {"test": 2}]'"#,
     r#"[{"test": 1}, {"test": 2}]"#
 )]
-#[case("blob", "CAST('Hello World' AS BINARY)", "Hello World")]
+#[case("binary(11)", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
+#[case("varbinary(11)", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
+#[case("tinyblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
+#[case("blob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
+#[case("mediumblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
+#[case("longblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[case] expected: &str) {
     let mut in_db = TestMysqlDatabase::new();
     let mut out_db = TestMysqlDatabase::new();
