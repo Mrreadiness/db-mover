@@ -2,6 +2,58 @@ use chrono::{NaiveDateTime, TimeZone, Utc};
 
 use crate::databases::table::{Column, ColumnType, Value};
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct MysqlTypeOptions {
+    pub binary_16_as_uuid: bool,
+    pub tinyint_as_bool: bool,
+}
+
+impl Default for MysqlTypeOptions {
+    fn default() -> Self {
+        return MysqlTypeOptions {
+            binary_16_as_uuid: true,
+            tinyint_as_bool: true,
+        };
+    }
+}
+
+impl ColumnType {
+    pub fn try_from_mysql_type(
+        type_name: &str,
+        options: &MysqlTypeOptions,
+    ) -> anyhow::Result<ColumnType> {
+        let formated = type_name.trim().to_lowercase();
+        if options.binary_16_as_uuid && formated == "binary(16)" {
+            return Ok(ColumnType::Uuid);
+        }
+        if options.tinyint_as_bool && formated == "tinyint(1)" {
+            return Ok(ColumnType::Bool);
+        }
+        if formated.starts_with("char") || formated.starts_with("varchar") {
+            return Ok(ColumnType::String);
+        }
+        if formated.starts_with("binary") || formated.starts_with("varbinary") {
+            return Ok(ColumnType::Bytes);
+        }
+        return match formated.as_str() {
+            "smallint" => Ok(ColumnType::I16),
+            "integer" | "int" => Ok(ColumnType::I32),
+            "bigint" => Ok(ColumnType::I64),
+            "float" => Ok(ColumnType::F32),
+            "double" | "real" | "double precision" => Ok(ColumnType::F64),
+            "bool" | "boolean" => Ok(ColumnType::Bool),
+            "tinytext" | "text" | "mediumtext" | "longtext" => Ok(ColumnType::String),
+            "tinyblob" | "blob" | "mediumblob" | "longblob" => Ok(ColumnType::Bytes),
+            "timestamp" => Ok(ColumnType::Timestamptz),
+            "datetime" => Ok(ColumnType::Timestamp),
+            "date" => Ok(ColumnType::Date),
+            "time" => Ok(ColumnType::Time),
+            "json" => Ok(ColumnType::Json),
+            _ => Err(anyhow::anyhow!("Unknown column type {type_name}")),
+        };
+    }
+}
+
 impl TryFrom<(&Column, mysql::Value)> for Value {
     type Error = anyhow::Error;
 
@@ -30,5 +82,27 @@ impl TryFrom<(&Column, mysql::Value)> for Value {
             ColumnType::Uuid => Value::Uuid(mysql::from_value_opt(val)?),
         };
         return Ok(parsed);
+    }
+}
+
+impl From<&Value> for mysql::Value {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::Null => mysql::Value::NULL,
+            Value::I64(val) => val.into(),
+            Value::I32(val) => val.into(),
+            Value::I16(val) => val.into(),
+            Value::F64(val) => val.into(),
+            Value::F32(val) => val.into(),
+            Value::Bool(val) => val.into(),
+            Value::String(val) => val.into(),
+            Value::Bytes(val) => val.into(),
+            Value::Timestamptz(val) => val.naive_utc().into(),
+            Value::Timestamp(val) => val.into(),
+            Value::Date(val) => val.into(),
+            Value::Time(val) => val.into(),
+            Value::Json(val) => val.into(),
+            Value::Uuid(val) => val.into(),
+        }
     }
 }

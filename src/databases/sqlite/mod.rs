@@ -34,9 +34,9 @@ impl SqliteDB {
     }
 
     fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<Column>> {
-        let mut stmt = self
-            .connection
-            .prepare("SELECT name, type, `notnull` FROM pragma_table_info WHERE arg=?")?;
+        let mut stmt = self.connection.prepare(
+            "SELECT name, type, `notnull` FROM pragma_table_info WHERE arg=? ORDER BY cid",
+        )?;
         let mut rows = stmt.query([table])?;
         let mut result = Vec::new();
         while let Ok(Some(row)) = rows.next() {

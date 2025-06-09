@@ -23,7 +23,7 @@ db-mover --help
 
 - [x] PostgreSQL support
 - [x] SQLite support
-- [ ] MySQL / MariaDB support
+- [x] MySQL / MariaDB support
 - [ ] Microsoft SQL Server support
 - [ ] Oracle support
 - [x] schema compatibility check
@@ -69,6 +69,25 @@ DB Mover ensures schema compatibility by comparing the table schemas from the re
 | UUID                        | Uuid          |
 | JSON, JSONB                 | Json          |
 
+### MySQL
+
+| MySQL type name (case insensitive)                      | DB Mover      | Comment                                                  |
+|---------------------------------------------------------|---------------|----------------------------------------------------------|
+| char, varchar, tinytext, text, mediumtext, longtext     | String        |                                                          |
+| binary, varbinary, tinyblob, blob, mediumblob, longblob | Bytes         |                                                          |
+| bigint                                                  | I64           |                                                          |
+| integer                                                 | I32, I64      |                                                          |
+| smallint                                                | I16, I32, I64 |                                                          |
+| double, double precision, real                          | F64           |                                                          |
+| float                                                   | F32, F64      |                                                          |
+| boolean, bool, tinyint(1)                               | Bool          |                                                          |
+| timestamp                                               | Timestamptz   |                                                          |
+| datetime                                                | Timestamp     |                                                          |
+| date                                                    | Date          |                                                          |
+| time                                                    | Time          |                                                          |
+| binary(16)                                              | Uuid          | Can be disabled with flag `--no-mysql-binary-16-as-uuid` |
+| json                                                    | Json          |                                                          |
+
 ### SQLite
 
 SQLite uses [dynamic typing](https://www.sqlite.org/datatype3.html), so type mapping is based on the declared column type names. If an actual column value does not match the expected DB Mover type inferred from the column name, an error will be raised.
@@ -80,7 +99,7 @@ SQLite uses [dynamic typing](https://www.sqlite.org/datatype3.html), so type map
 | bigint, bigserial                                                 | I64           |                                                                                   |
 | integer, serial                                                   | I32, I64      |                                                                                   |
 | tinyint, smallint, smallserial                                    | I16, I32, I64 |                                                                                   |
-| double, double precision, numeric, decimal                        | F64           |                                                                                   |
+| double, double precision                                          | F64           |                                                                                   |
 | real, float                                                       | F32, F64      |                                                                                   |
 | boolean, bool                                                     | Bool          |                                                                                   |
 | timestamptz                                                       | Timestamptz   | RFC3339 ("YYYY-MM-DD HH:MM:SS.SSS+-HH:MM")                                        |

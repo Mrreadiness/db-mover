@@ -1,7 +1,7 @@
 use chrono::NaiveDateTime;
 use fake::Dummy;
 
-#[derive(PartialEq, Debug, Dummy, Clone)]
+#[derive(Debug, Dummy, Clone)]
 pub struct TestRow {
     pub id: i64,
     pub real: f32,
@@ -11,6 +11,20 @@ pub struct TestRow {
         expr = "chrono::NaiveDate::from_ymd_opt(2016, 7, 8).unwrap().and_hms_opt(0, 0, 0).unwrap()"
     )]
     pub timestamp: NaiveDateTime,
+}
+
+fn approx_equal_f32(a: f32, b: f32, epsilon: f32) -> bool {
+    (a - b).abs() < epsilon
+}
+
+impl PartialEq for TestRow {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && approx_equal_f32(self.real, other.real, 1e-6)
+            && self.text == other.text
+            && self.blob == other.blob
+            && self.timestamp == other.timestamp
+    }
 }
 
 impl From<postgres::Row> for TestRow {

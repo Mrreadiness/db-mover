@@ -1,27 +1,32 @@
-use std::str::FromStr;
-
 use anyhow::Context;
 use mysql::prelude::Queryable;
-use mysql::{Conn, Opts, params};
+use mysql::{Conn, Opts, TxOpts, params};
 use tracing::debug;
+pub use value::MysqlTypeOptions;
 
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader};
 
 use super::table::{Column, ColumnType, TableInfo};
-use super::traits::ReaderIterator;
+use super::traits::{DBWriter, ReaderIterator, WriterError};
 
 mod value;
 
 pub struct MysqlDB {
+    uri: String,
     connection: Conn,
+    type_options: MysqlTypeOptions,
 }
 
 impl MysqlDB {
-    pub fn new(uri: &str) -> anyhow::Result<Self> {
+    pub fn new(uri: &str, type_options: MysqlTypeOptions) -> anyhow::Result<Self> {
         let connection = Self::connect(uri)?;
         debug!("Connected to mysql {uri}");
-        return Ok(Self { connection });
+        return Ok(Self {
+            uri: uri.to_string(),
+            connection,
+            type_options,
+        });
     }
 
     fn connect(uri: &str) -> Result<Conn, anyhow::Error> {
@@ -41,30 +46,6 @@ impl MysqlDB {
     }
 }
 
-impl TryFrom<mysql::Row> for Column {
-    type Error = anyhow::Error;
-
-    fn try_from(value: mysql::Row) -> Result<Self, Self::Error> {
-        let name = value
-            .get_opt(0)
-            .context("Value expected")?
-            .context("Couldn't parse column name")?;
-        let column_type: String = value
-            .get_opt(1)
-            .context("Value expected")?
-            .context("Couldn't parse column type")?;
-        let nullable: String = value
-            .get_opt(2)
-            .context("Value expected")?
-            .context("Couldn't parse column nullable")?;
-        return Ok(Column {
-            name,
-            column_type: ColumnType::from_str(&column_type)?, // TODO: mysql specific
-            nullable: nullable.as_str() == "YES",
-        });
-    }
-}
-
 impl DBInfoProvider for MysqlDB {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
@@ -75,12 +56,29 @@ impl DBInfoProvider for MysqlDB {
             );
         }
 
-        let info_rows: Vec<mysql::Row> = self.connection.exec(r"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE 
+        let info_rows: Vec<mysql::Row> = self.connection.exec(r"SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE 
                                                                 FROM INFORMATION_SCHEMA.COLUMNS 
-                                                                WHERE table_name = :table AND TABLE_SCHEMA = database()", params! {table})?;
+                                                                WHERE table_name = :table AND TABLE_SCHEMA = database()
+                                                                ORDER BY ORDINAL_POSITION", params! {table})?;
         let mut columns = Vec::with_capacity(info_rows.len());
         for row in info_rows {
-            columns.push(Column::try_from(row)?);
+            let name = row
+                .get_opt(0)
+                .context("Value expected")?
+                .context("Couldn't parse column name")?;
+            let column_type: String = row
+                .get_opt(1)
+                .context("Value expected")?
+                .context("Couldn't parse column type")?;
+            let nullable: String = row
+                .get_opt(2)
+                .context("Value expected")?
+                .context("Couldn't parse column nullable")?;
+            columns.push(Column {
+                name,
+                column_type: ColumnType::try_from_mysql_type(&column_type, &self.type_options)?,
+                nullable: nullable.as_str() == "YES",
+            });
         }
 
         return Ok(TableInfo {
@@ -134,5 +132,40 @@ impl DBReader for MysqlDB {
             target_format,
             rows,
         }));
+    }
+}
+
+impl DBWriter for MysqlDB {
+    fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
+        return MysqlDB::new(&self.uri, self.type_options.clone())
+            .map(|writer| Box::new(writer) as _);
+    }
+
+    fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {
+        let mut trx = self
+            .connection
+            .start_transaction(TxOpts::default())
+            .context("Failed to start mysql stransaction")?;
+        let placeholder = format!(
+            "({})",
+            batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+        );
+        trx.exec_batch(
+            format!("INSERT INTO {table} VALUES {placeholder}"),
+            batch
+                .iter()
+                .map(|row| row.iter().map(mysql::Value::from).collect::<Vec<_>>()),
+        )
+        .context("Unable to insert values into mysql")?;
+        trx.commit().context("Failed to commit mysql transaction")?;
+
+        return Ok(());
+    }
+
+    fn recover(&mut self) -> anyhow::Result<()> {
+        debug!("Trying to reconnect to the mysql");
+        self.connection = Self::connect(&self.uri)?;
+        debug!("Successfully reconnected to the mysql");
+        return Ok(());
     }
 }

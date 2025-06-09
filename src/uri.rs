@@ -1,47 +1,10 @@
 use std::str::FromStr;
 
-use anyhow::Context;
-
-use crate::databases::mysql::MysqlDB;
-use crate::databases::postgres::PostgresDB;
-use crate::databases::sqlite::SqliteDB;
-use crate::databases::traits::{DBReader, DBWriter};
-
 #[derive(Debug, Clone)]
 pub enum URI {
     Sqlite(String),
     Postgres(String),
     Mysql(String),
-}
-
-impl URI {
-    pub fn create_reader(&self) -> anyhow::Result<Box<dyn DBReader>> {
-        let reader: Box<dyn DBReader> = match self {
-            URI::Sqlite(uri) => {
-                Box::new(SqliteDB::new(uri).context("Unable to connect to the sqlite")?)
-            }
-            URI::Postgres(uri) => {
-                Box::new(PostgresDB::new(uri).context("Unable to connect to the postgres")?)
-            }
-            URI::Mysql(uri) => {
-                Box::new(MysqlDB::new(uri).context("Unable to connect to the mysql")?)
-            }
-        };
-        return Ok(reader);
-    }
-
-    pub fn create_writer(&self) -> anyhow::Result<Box<dyn DBWriter>> {
-        let writer: Box<dyn DBWriter> = match self {
-            URI::Sqlite(uri) => {
-                Box::new(SqliteDB::new(uri).context("Unable to connect to the sqlite")?)
-            }
-            URI::Postgres(uri) => {
-                Box::new(PostgresDB::new(uri).context("Unable to connect to the postgres")?)
-            }
-            URI::Mysql(_uri) => return Err(anyhow::anyhow!("Mysql writer is not supported")),
-        };
-        return Ok(writer);
-    }
 }
 
 impl FromStr for URI {
