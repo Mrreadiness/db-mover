@@ -23,7 +23,7 @@ db-mover --help
 
 - [x] PostgreSQL support
 - [x] SQLite support
-- [ ] MySQL / MariaDB support
+- [x] MySQL / MariaDB support
 - [ ] Microsoft SQL Server support
 - [ ] Oracle support
 - [x] schema compatibility check
@@ -68,6 +68,25 @@ DB Mover ensures schema compatibility by comparing the table schemas from the re
 | time without time zone      | Time          |
 | UUID                        | Uuid          |
 | JSON, JSONB                 | Json          |
+
+### MySQL
+
+| MySQL type name (case insensitive)                      | DB Mover      | Comment                                                  |
+|---------------------------------------------------------|---------------|----------------------------------------------------------|
+| char, varchar, tinytext, text, mediumtext, longtext     | String        |                                                          |
+| binary, varbinary, tinyblob, blob, mediumblob, longblob | Bytes         |                                                          |
+| bigint                                                  | I64           |                                                          |
+| integer                                                 | I32, I64      |                                                          |
+| smallint                                                | I16, I32, I64 |                                                          |
+| double, double precision, real                          | F64           |                                                          |
+| float                                                   | F32, F64      |                                                          |
+| boolean, bool, tinyint(1)                               | Bool          |                                                          |
+| timestamp                                               | Timestamptz   |                                                          |
+| datetime                                                | Timestamp     |                                                          |
+| date                                                    | Date          |                                                          |
+| time                                                    | Time          |                                                          |
+| binary(16)                                              | Uuid          | Can be disabled with flag `--no-mysql-binary-16-as-uuid` |
+| json                                                    | Json          |                                                          |
 
 ### SQLite
 
