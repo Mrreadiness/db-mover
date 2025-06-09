@@ -192,23 +192,16 @@ fn postgres_types_compatability(
     r#"'[{"test": 1}, {"test": 2}]'"#,
     r#"[{"test": 1}, {"test": 2}]"#
 )]
-#[case(
-    "binary(16)",
-    "X'67e5504410b1426f9247bb680e5fe0c8'",
-    "67e55044-10b1-426f-9247-bb680e5fe0c8"
-)]
+#[case("blob", "CAST('Hello World' AS BINARY)", "Hello World")]
 fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[case] expected: &str) {
     let mut in_db = TestMysqlDatabase::new();
     let mut out_db = TestMysqlDatabase::new();
     let create_table_query = format!("CREATE TABLE test (field {type_name})");
-    in_db.connection.query_drop(&create_table_query).unwrap();
-    out_db.connection.query_drop(&create_table_query).unwrap();
+    in_db.execute(&create_table_query);
+    out_db.execute(&create_table_query);
 
     let mut expected = vec![Some(expected.to_string())];
-    in_db
-        .connection
-        .query_drop(format!("INSERT INTO test VALUES ({value})"))
-        .unwrap();
+    in_db.execute(format!("INSERT INTO test VALUES ({value})"));
 
     in_db
         .connection
@@ -221,17 +214,73 @@ fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[cas
 
     db_mover::run(args.clone()).unwrap();
 
-    let query = match type_name {
-        "binary(16)" => "SELECT BIN_TO_UUID(field) FROM test",
-        _ => "SELECT CAST(field as CHAR) FROM test",
-    };
-
     let mut result = out_db
         .connection
-        .query_map(query, |row: mysql::Row| {
+        .query_map("SELECT CAST(field AS CHAR) FROM test", |row: mysql::Row| {
             row.get::<Option<String>, _>(0).unwrap()
         })
         .unwrap();
+    expected.sort();
+    result.sort();
+    assert_eq!(expected, result);
+}
+
+#[rstest]
+fn mysql_binary_16_uuid() {
+    let mut in_db = TestMysqlDatabase::new();
+    let mut out_db = TestPostresDatabase::new();
+    in_db.execute("CREATE TABLE test (field binary(16))");
+    out_db.execute("CREATE TABLE test (field UUID)");
+
+    in_db.execute(format!(
+        "INSERT INTO test VALUES (X'67e5504410b1426f9247bb680e5fe0c8')"
+    ));
+    in_db.execute("INSERT INTO test VALUES (NULL)");
+    let mut expected = vec![Some("67e55044-10b1-426f-9247-bb680e5fe0c8".to_string())];
+    expected.push(None);
+
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+
+    db_mover::run(args.clone()).unwrap();
+
+    let mut result: Vec<Option<String>> = out_db
+        .client
+        .query("SELECT CAST(field as TEXT) FROM test", &[])
+        .unwrap()
+        .iter()
+        .map(|row| row.get::<_, Option<String>>(0))
+        .collect();
+    expected.sort();
+    result.sort();
+    assert_eq!(expected, result);
+}
+
+#[rstest]
+fn mysql_binary_16_no_uuid() {
+    let mut in_db = TestMysqlDatabase::new();
+    let mut out_db = TestPostresDatabase::new();
+    in_db.execute("CREATE TABLE test (field binary(16))");
+    out_db.execute("CREATE TABLE test (field bytea)");
+
+    in_db.execute(format!("INSERT INTO test VALUES (X'9fad5e9eefdfb449')"));
+    in_db.execute("INSERT INTO test VALUES (NULL)");
+    let mut expected = vec![Some("\\x9fad5e9eefdfb4490000000000000000".to_string())];
+    expected.push(None);
+
+    let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    args.table.push("test".to_string());
+    args.no_mysql_binary_16_as_uuid = true;
+
+    db_mover::run(args.clone()).unwrap();
+
+    let mut result: Vec<Option<String>> = out_db
+        .client
+        .query("SELECT CAST(field as TEXT) FROM test", &[])
+        .unwrap()
+        .iter()
+        .map(|row| row.get::<_, Option<String>>(0))
+        .collect();
     expected.sort();
     result.sort();
     assert_eq!(expected, result);

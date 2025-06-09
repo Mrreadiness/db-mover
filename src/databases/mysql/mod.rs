@@ -2,7 +2,7 @@ use anyhow::Context;
 use mysql::prelude::Queryable;
 use mysql::{Conn, Opts, TxOpts, params};
 use tracing::debug;
-use value::MysqlTypeOptions;
+pub use value::MysqlTypeOptions;
 
 use crate::databases::table::{Row, Value};
 use crate::databases::traits::{DBInfoProvider, DBReader};
@@ -19,13 +19,13 @@ pub struct MysqlDB {
 }
 
 impl MysqlDB {
-    pub fn new(uri: &str) -> anyhow::Result<Self> {
+    pub fn new(uri: &str, type_options: MysqlTypeOptions) -> anyhow::Result<Self> {
         let connection = Self::connect(uri)?;
         debug!("Connected to mysql {uri}");
         return Ok(Self {
             uri: uri.to_string(),
             connection,
-            type_options: MysqlTypeOptions::default(),
+            type_options,
         });
     }
 
@@ -46,31 +46,6 @@ impl MysqlDB {
     }
 }
 
-impl TryFrom<mysql::Row> for Column {
-    type Error = anyhow::Error;
-
-    fn try_from(value: mysql::Row) -> Result<Self, Self::Error> {
-        let name = value
-            .get_opt(0)
-            .context("Value expected")?
-            .context("Couldn't parse column name")?;
-        let column_type: String = value
-            .get_opt(1)
-            .context("Value expected")?
-            .context("Couldn't parse column type")?;
-        let nullable: String = value
-            .get_opt(2)
-            .context("Value expected")?
-            .context("Couldn't parse column nullable")?;
-        let options = MysqlTypeOptions::default();
-        return Ok(Column {
-            name,
-            column_type: ColumnType::try_from_mysql_type(&column_type, &options)?,
-            nullable: nullable.as_str() == "YES",
-        });
-    }
-}
-
 impl DBInfoProvider for MysqlDB {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
@@ -81,7 +56,7 @@ impl DBInfoProvider for MysqlDB {
             );
         }
 
-        let info_rows: Vec<mysql::Row> = self.connection.exec(r"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE 
+        let info_rows: Vec<mysql::Row> = self.connection.exec(r"SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE 
                                                                 FROM INFORMATION_SCHEMA.COLUMNS 
                                                                 WHERE table_name = :table AND TABLE_SCHEMA = database()
                                                                 ORDER BY ORDINAL_POSITION", params! {table})?;
@@ -162,7 +137,8 @@ impl DBReader for MysqlDB {
 
 impl DBWriter for MysqlDB {
     fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
-        return MysqlDB::new(&self.uri).map(|writer| Box::new(writer) as _);
+        return MysqlDB::new(&self.uri, self.type_options.clone())
+            .map(|writer| Box::new(writer) as _);
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {

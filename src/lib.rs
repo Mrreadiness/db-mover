@@ -10,8 +10,8 @@ pub mod uri;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
     for table in &args.table {
-        let reader = args.input.create_reader()?;
-        let writer = args.output.create_writer()?;
+        let reader = args.create_reader()?;
+        let writer = args.create_writer()?;
         info!("Processing table {table}");
         let migrator = table_migrator::TableMigrator::new(reader, writer, table, (&args).into())?;
         if !args.dry_run {

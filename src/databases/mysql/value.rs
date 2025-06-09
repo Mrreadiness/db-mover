@@ -2,9 +2,10 @@ use chrono::{NaiveDateTime, TimeZone, Utc};
 
 use crate::databases::table::{Column, ColumnType, Value};
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct MysqlTypeOptions {
-    binary_16_as_uuid: bool,
-    tinyint_as_bool: bool,
+    pub binary_16_as_uuid: bool,
+    pub tinyint_as_bool: bool,
 }
 
 impl Default for MysqlTypeOptions {
@@ -25,7 +26,7 @@ impl ColumnType {
         if options.binary_16_as_uuid && formated == "binary(16)" {
             return Ok(ColumnType::Uuid);
         }
-        if options.tinyint_as_bool && formated == "tinyint" {
+        if options.tinyint_as_bool && formated == "tinyint(1)" {
             return Ok(ColumnType::Bool);
         }
         if formated.starts_with("char") || formated.starts_with("varchar") {
