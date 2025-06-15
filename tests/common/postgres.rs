@@ -1,6 +1,7 @@
 use std::sync::LazyLock;
 
 use fake::{Fake, Faker};
+use itertools::Itertools;
 use testcontainers::{Container, ImageExt, runners::SyncRunner};
 
 use postgres::{Client, NoTls};
@@ -65,13 +66,9 @@ fn generate_placeholders(blocks: usize) -> String {
     (0..blocks)
         .map(|i| {
             let start = i * 5 + 1;
-            let params = (start..start + 5)
-                .map(|n| format!("${}", n))
-                .collect::<Vec<_>>()
-                .join(", ");
+            let params = (start..start + 5).map(|n| format!("${}", n)).join(", ");
             format!("({})", params)
         })
-        .collect::<Vec<_>>()
         .join(", ")
 }
 

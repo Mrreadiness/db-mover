@@ -162,10 +162,10 @@ impl DBReader for SqliteDB {
 }
 
 impl DBWriter for SqliteDB {
-    fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {
+    fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
         // SQLite is not network dependent, assume that all errors are Unrecoverable
         return self
-            .write_batch_impl(batch, table)
+            .write_batch_impl(batch, &table.name)
             .map_err(WriterError::Unrecoverable);
     }
 
