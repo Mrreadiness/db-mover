@@ -1,6 +1,7 @@
 use anyhow::Context;
+use itertools::Itertools;
 use mysql::prelude::Queryable;
-use mysql::{Conn, Opts, TxOpts, params};
+use mysql::{Conn, Opts, params};
 use tracing::debug;
 pub use value::MysqlTypeOptions;
 
@@ -141,23 +142,20 @@ impl DBWriter for MysqlDB {
             .map(|writer| Box::new(writer) as _);
     }
 
-    fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {
-        let mut trx = self
-            .connection
-            .start_transaction(TxOpts::default())
-            .context("Failed to start mysql stransaction")?;
-        let placeholder = format!(
-            "({})",
-            batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-        );
-        trx.exec_batch(
-            format!("INSERT INTO {table} VALUES {placeholder}"),
-            batch
-                .iter()
-                .map(|row| row.iter().map(mysql::Value::from).collect::<Vec<_>>()),
-        )
-        .context("Unable to insert values into mysql")?;
-        trx.commit().context("Failed to commit mysql transaction")?;
+    fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
+        let placeholder = generate_placeholders(batch[0].len(), batch.len());
+        let mut values = Vec::with_capacity(batch[0].len() * batch.len());
+        for row in batch {
+            for value in row {
+                values.push(mysql::Value::from(value));
+            }
+        }
+        self.connection
+            .exec_drop(
+                format!("INSERT INTO {} VALUES {placeholder}", table.name),
+                mysql::Params::Positional(values),
+            )
+            .context("Unable to insert values into mysql")?;
 
         return Ok(());
     }
@@ -168,4 +166,10 @@ impl DBWriter for MysqlDB {
         debug!("Successfully reconnected to the mysql");
         return Ok(());
     }
+}
+
+fn generate_placeholders(per_block: usize, blocks: usize) -> String {
+    let block_inner = std::iter::repeat_n("?", per_block).join(", ");
+    let block = format!("({block_inner})");
+    return std::iter::repeat_n(block, blocks).join(", ");
 }

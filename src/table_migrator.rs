@@ -162,7 +162,7 @@ impl TableMigrator {
         mut writer: Box<dyn DBWriter>,
         reciever: channel::Reciever,
         tracker: &TableMigrationProgress,
-        table: &str,
+        table: &TableInfo,
         batch_size: usize,
         retries: usize,
         stopped: &std::sync::atomic::AtomicBool,
@@ -216,7 +216,7 @@ impl TableMigrator {
                         writer,
                         self.reciever.clone(),
                         &self.tracker,
-                        &self.target_format.name,
+                        &self.target_format,
                         self.settings.batch_write_size,
                         self.settings.batch_write_retries,
                         &self.stopped,
@@ -262,7 +262,7 @@ mod tests {
             fn read_iter<'a>(&'a mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'a>>;
         }
         impl DBWriter for DB {
-            fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError>;
+            fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError>;
             fn recover(&mut self) -> anyhow::Result<()>;
         }
     }
@@ -281,6 +281,7 @@ mod tests {
     }
 
     const NUM_ROWS: u64 = 5;
+
     const TABLE_NAME: &str = "test";
 
     impl TableInfo {
@@ -397,7 +398,7 @@ mod tests {
             Box::new(db_mock),
             receiver,
             &tracker,
-            TABLE_NAME,
+            &TableInfo::default_out(),
             batch_size,
             0,
             &stopped,
@@ -429,7 +430,7 @@ mod tests {
             Box::new(db_mock),
             receiver,
             &tracker,
-            TABLE_NAME,
+            &TableInfo::default_out(),
             batch_size,
             0,
             &stopped,
@@ -449,7 +450,7 @@ mod tests {
             Box::new(db_mock),
             receiver,
             &tracker,
-            TABLE_NAME,
+            &TableInfo::default_out(),
             10,
             3,
             &stopped,
@@ -469,7 +470,7 @@ mod tests {
             Box::new(db_mock),
             receiver,
             &tracker,
-            TABLE_NAME,
+            &TableInfo::default_out(),
             10,
             3,
             &stopped,
