@@ -169,7 +169,17 @@ impl DBWriter for MysqlDB {
 }
 
 fn generate_placeholders(per_block: usize, blocks: usize) -> String {
+    use std::fmt::Write;
+
     let block_inner = std::iter::repeat_n("?", per_block).join(", ");
-    let block = format!("({block_inner})");
-    return std::iter::repeat_n(block, blocks).join(", ");
+    let mut result = String::with_capacity(blocks * (block_inner.len() + 3));
+    for i in 0..blocks {
+        if i > 0 {
+            result.push(',');
+        }
+        result.push('(');
+        result.write_str(&block_inner).unwrap();
+        result.push(')');
+    }
+    result
 }
