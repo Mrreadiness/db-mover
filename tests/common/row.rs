@@ -6,6 +6,7 @@ pub struct TestRow {
     pub id: i64,
     pub real: f32,
     pub text: String,
+    #[dummy(expr = "fake::vec![u8; 0..200]")]
     pub blob: Vec<u8>,
     #[dummy(
         expr = "chrono::NaiveDate::from_ymd_opt(2016, 7, 8).unwrap().and_hms_opt(0, 0, 0).unwrap()"
