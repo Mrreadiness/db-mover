@@ -1,7 +1,7 @@
 [package]
 name = "db-mover"
 description = "Tool to move data between databases"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/Mrreadiness/db-mover"
@@ -39,7 +39,7 @@ tempfile = "3.20.0"
 mockall = "0.13.1"
 pretty_assertions = "1.4.1"
 testcontainers = { version = "0.24.0", features = ["blocking"] }
-testcontainers-modules = { version = "0.12.0", features = ["postgres", "mysql"] }
+testcontainers-modules = { version = "0.12.0", features = ["postgres", "mysql", "mariadb"] }
 rstest_reuse = "0.7.0"
 itertools = "0.14.0"
 

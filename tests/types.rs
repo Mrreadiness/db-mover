@@ -194,21 +194,23 @@ const MYSQL_BYTES_EXPECTED: &'static str = "Hello World";
 #[case("datetime", "'1001-10-19 10:23:54'", "1001-10-19 10:23:54")]
 #[case("date", "'2004-10-19'", "2004-10-19")]
 #[case("time", "'10:23:54'", "10:23:54")]
-#[case("json", r#"'{"test": 1}'"#, r#"{"test": 1}"#)]
-#[case(
-    "json",
-    r#"'[{"test": 1}, {"test": 2}]'"#,
-    r#"[{"test": 1}, {"test": 2}]"#
-)]
+#[case("json", r#"'{"test":1}'"#, r#"{"test":1}"#)]
+#[case("json", r#"'[{"test":1},{"test":2}]'"#, r#"[{"test":1},{"test":2}]"#)]
 #[case("binary(11)", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("varbinary(11)", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("tinyblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("blob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("mediumblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("longblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
-fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[case] expected: &str) {
-    let mut in_db = TestMysqlDatabase::new();
-    let mut out_db = TestMysqlDatabase::new();
+fn mysql_types_compatability(
+    #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
+    mut in_db: TestMysqlDatabase,
+    #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
+    mut out_db: TestMysqlDatabase,
+    #[case] type_name: &str,
+    #[case] value: &str,
+    #[case] expected: &str,
+) {
     let create_table_query = format!("CREATE TABLE test (field {type_name})");
     in_db.execute(&create_table_query);
     out_db.execute(&create_table_query);
@@ -230,7 +232,13 @@ fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[cas
     let mut result = out_db
         .connection
         .query_map("SELECT CAST(field AS CHAR) FROM test", |row: mysql::Row| {
-            row.get::<Option<String>, _>(0).unwrap()
+            row.get::<Option<String>, _>(0).unwrap().map(|val| {
+                // Remove formatting difference
+                if type_name == "json" {
+                    return val.replace(" ", "");
+                };
+                return val;
+            })
         })
         .unwrap();
     expected.sort();
@@ -239,8 +247,10 @@ fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[cas
 }
 
 #[rstest]
-fn mysql_binary_16_uuid() {
-    let mut in_db = TestMysqlDatabase::new();
+fn mysql_binary_16_uuid(
+    #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
+    mut in_db: TestMysqlDatabase,
+) {
     let mut out_db = TestPostresDatabase::new();
     in_db.execute("CREATE TABLE test (field binary(16))");
     out_db.execute("CREATE TABLE test (field UUID)");
@@ -270,8 +280,10 @@ fn mysql_binary_16_uuid() {
 }
 
 #[rstest]
-fn mysql_binary_16_no_uuid() {
-    let mut in_db = TestMysqlDatabase::new();
+fn mysql_binary_16_no_uuid(
+    #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
+    mut in_db: TestMysqlDatabase,
+) {
     let mut out_db = TestPostresDatabase::new();
     in_db.execute("CREATE TABLE test (field binary(16))");
     out_db.execute("CREATE TABLE test (field bytea)");

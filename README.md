@@ -69,24 +69,24 @@ DB Mover ensures schema compatibility by comparing the table schemas from the re
 | UUID                        | Uuid          |
 | JSON, JSONB                 | Json          |
 
-### MySQL
+### MySQL/MariaDB
 
-| MySQL type name (case insensitive)                      | DB Mover      | Comment                                                  |
-|---------------------------------------------------------|---------------|----------------------------------------------------------|
-| char, varchar, tinytext, text, mediumtext, longtext     | String        |                                                          |
-| binary, varbinary, tinyblob, blob, mediumblob, longblob | Bytes         |                                                          |
-| bigint                                                  | I64           |                                                          |
-| integer                                                 | I32, I64      |                                                          |
-| smallint                                                | I16, I32, I64 |                                                          |
-| double, double precision, real                          | F64           |                                                          |
-| float                                                   | F32, F64      |                                                          |
-| boolean, bool, tinyint(1)                               | Bool          |                                                          |
-| timestamp                                               | Timestamptz   |                                                          |
-| datetime                                                | Timestamp     |                                                          |
-| date                                                    | Date          |                                                          |
-| time                                                    | Time          |                                                          |
-| binary(16)                                              | Uuid          | Can be disabled with flag `--no-mysql-binary-16-as-uuid` |
-| json                                                    | Json          |                                                          |
+| Type name (case insensitive)                            | DB Mover      | Comment                                                                            |
+|---------------------------------------------------------|---------------|------------------------------------------------------------------------------------|
+| char, varchar, tinytext, text, mediumtext, longtext     | String        |                                                                                    |
+| binary, varbinary, tinyblob, blob, mediumblob, longblob | Bytes         |                                                                                    |
+| bigint                                                  | I64           |                                                                                    |
+| integer                                                 | I32, I64      |                                                                                    |
+| smallint                                                | I16, I32, I64 |                                                                                    |
+| double, double precision, real                          | F64           |                                                                                    |
+| float                                                   | F32, F64      |                                                                                    |
+| boolean, bool, tinyint(1)                               | Bool          |                                                                                    |
+| timestamp                                               | Timestamptz   |                                                                                    |
+| datetime                                                | Timestamp     |                                                                                    |
+| date                                                    | Date          |                                                                                    |
+| time                                                    | Time          |                                                                                    |
+| binary(16)                                              | Uuid          | Can be disabled with flag `--no-mysql-binary-16-as-uuid`                           |
+| json, longtext                                          | Json          | In MariaDB, a longtext column with a `JSON_VALID()` constraint is treated as JSON. |
 
 ### SQLite
 
