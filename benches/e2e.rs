@@ -112,7 +112,7 @@ fn sqlite_to_mysql(c: &mut Criterion) {
     group.bench_with_input(NUM_ROWS.to_string(), &NUM_ROWS, |b, num_rows| {
         input.init(*num_rows);
         b.iter(|| {
-            let mut output = TestMysqlDatabase::new();
+            let mut output = TestMysqlDatabase::new_mysql();
             output.create_test_table("test");
             let mut args = db_mover::args::Args::new(input.get_uri(), output.get_uri());
             args.writer_workers = 4;
@@ -124,8 +124,43 @@ fn sqlite_to_mysql(c: &mut Criterion) {
 }
 
 fn mysql_to_sqlite(c: &mut Criterion) {
-    let mut input = LazyTestDatabaseFactory::new(TestMysqlDatabase::new());
+    let mut input = LazyTestDatabaseFactory::new(TestMysqlDatabase::new_mysql());
     let mut group = c.benchmark_group("mysql_to_sqlite");
+    group.throughput(Throughput::Elements(NUM_ROWS as u64));
+    group.bench_with_input(NUM_ROWS.to_string(), &NUM_ROWS, |b, num_rows| {
+        input.init(*num_rows);
+        b.iter(|| {
+            let mut output = TestSqliteDatabase::new();
+            output.create_test_table("test");
+            let mut args = db_mover::args::Args::new(input.get_uri(), output.get_uri());
+            args.table.push("test".to_string());
+
+            db_mover::run(args.clone()).unwrap();
+        })
+    });
+}
+
+fn sqlite_to_mariadb(c: &mut Criterion) {
+    let mut input = LazyTestDatabaseFactory::new(TestSqliteDatabase::new());
+    let mut group = c.benchmark_group("sqlite_to_mariadb");
+    group.throughput(Throughput::Elements(NUM_ROWS as u64));
+    group.bench_with_input(NUM_ROWS.to_string(), &NUM_ROWS, |b, num_rows| {
+        input.init(*num_rows);
+        b.iter(|| {
+            let mut output = TestMysqlDatabase::new_mariadb();
+            output.create_test_table("test");
+            let mut args = db_mover::args::Args::new(input.get_uri(), output.get_uri());
+            args.writer_workers = 4;
+            args.table.push("test".to_string());
+
+            db_mover::run(args.clone()).unwrap();
+        })
+    });
+}
+
+fn mariadb_to_sqlite(c: &mut Criterion) {
+    let mut input = LazyTestDatabaseFactory::new(TestMysqlDatabase::new_mariadb());
+    let mut group = c.benchmark_group("mariadb_to_sqlite");
     group.throughput(Throughput::Elements(NUM_ROWS as u64));
     group.bench_with_input(NUM_ROWS.to_string(), &NUM_ROWS, |b, num_rows| {
         input.init(*num_rows);
@@ -143,6 +178,6 @@ fn mysql_to_sqlite(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = sqlite_to_sqlite, sqlite_to_postgres, postgres_to_sqlite, postgres_to_postgres, sqlite_to_mysql, mysql_to_sqlite
+    targets = sqlite_to_sqlite, sqlite_to_postgres, postgres_to_sqlite, postgres_to_postgres, sqlite_to_mysql, mysql_to_sqlite, sqlite_to_mariadb, mariadb_to_sqlite,
 }
 criterion_main!(benches);
