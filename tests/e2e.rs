@@ -24,13 +24,15 @@ fn all_databases_combinations(
     #[values(
         TestSqliteDatabase::new(),
         TestPostresDatabase::new(),
-        TestMysqlDatabase::new()
+        TestMysqlDatabase::new_mysql(),
+        TestMysqlDatabase::new_mariadb()
     )]
     in_db: impl TestableDatabase,
     #[values(
         TestSqliteDatabase::new(),
         TestPostresDatabase::new(),
-        TestMysqlDatabase::new()
+        TestMysqlDatabase::new_mysql(),
+        TestMysqlDatabase::new_mariadb()
     )]
     out_db: impl TestableDatabase,
 ) {

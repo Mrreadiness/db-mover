@@ -20,35 +20,49 @@ static MYSQL_CONTAINER: LazyLock<Container<testcontainers_modules::mysql::Mysql>
             .unwrap()
     });
 
+static MARIADB_CONTAINER: LazyLock<Container<testcontainers_modules::mariadb::Mariadb>> =
+    LazyLock::new(|| {
+        let name = "db_mover_tests_mariadb";
+        rm_container_by_name(name);
+        testcontainers_modules::mariadb::Mariadb::default()
+            .with_container_name(name)
+            .start()
+            .unwrap()
+    });
+
 pub struct TestMysqlDatabase {
     pub uri: String,
     pub connection: Conn,
 }
 
 impl TestMysqlDatabase {
-    pub fn new() -> Self {
-        let container = &MYSQL_CONTAINER;
-
+    pub fn new(host: String, port: u16) -> Self {
         let new_db_name = gen_database_name();
-        let base_uri = format!(
-            "mysql://root@{}:{}/test",
-            container.get_host().unwrap(),
-            container.get_host_port_ipv4(3306).unwrap(),
-        );
+        let base_uri = format!("mysql://root@{}:{}/test", host, port,);
         let mut base_connection = Conn::new(Opts::from_url(&base_uri).unwrap()).unwrap();
         base_connection
             .query_drop(format!("CREATE DATABASE {new_db_name}"))
             .unwrap();
 
-        let uri = format!(
-            "mysql://root@{}:{}/{new_db_name}",
-            container.get_host().unwrap(),
-            container.get_host_port_ipv4(3306).unwrap(),
-        );
+        let uri = format!("mysql://root@{}:{}/{new_db_name}", host, port,);
         let opts = Opts::from_url(&uri).unwrap();
         let connection = Conn::new(opts).unwrap();
 
         return Self { uri, connection };
+    }
+
+    pub fn new_mysql() -> Self {
+        return Self::new(
+            MYSQL_CONTAINER.get_host().unwrap().to_string(),
+            MYSQL_CONTAINER.get_host_port_ipv4(3306).unwrap(),
+        );
+    }
+
+    pub fn new_mariadb() -> Self {
+        return Self::new(
+            MARIADB_CONTAINER.get_host().unwrap().to_string(),
+            MARIADB_CONTAINER.get_host_port_ipv4(3306).unwrap(),
+        );
     }
 }
 

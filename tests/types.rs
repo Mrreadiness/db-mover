@@ -206,9 +206,15 @@ const MYSQL_BYTES_EXPECTED: &'static str = "Hello World";
 #[case("blob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("mediumblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("longblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
-fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[case] expected: &str) {
-    let mut in_db = TestMysqlDatabase::new();
-    let mut out_db = TestMysqlDatabase::new();
+fn mysql_types_compatability(
+    #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
+    mut in_db: TestMysqlDatabase,
+    #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
+    mut out_db: TestMysqlDatabase,
+    #[case] type_name: &str,
+    #[case] value: &str,
+    #[case] expected: &str,
+) {
     let create_table_query = format!("CREATE TABLE test (field {type_name})");
     in_db.execute(&create_table_query);
     out_db.execute(&create_table_query);
@@ -239,8 +245,10 @@ fn mysql_types_compatability(#[case] type_name: &str, #[case] value: &str, #[cas
 }
 
 #[rstest]
-fn mysql_binary_16_uuid() {
-    let mut in_db = TestMysqlDatabase::new();
+fn mysql_binary_16_uuid(
+    #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
+    mut in_db: TestMysqlDatabase,
+) {
     let mut out_db = TestPostresDatabase::new();
     in_db.execute("CREATE TABLE test (field binary(16))");
     out_db.execute("CREATE TABLE test (field UUID)");
@@ -270,8 +278,10 @@ fn mysql_binary_16_uuid() {
 }
 
 #[rstest]
-fn mysql_binary_16_no_uuid() {
-    let mut in_db = TestMysqlDatabase::new();
+fn mysql_binary_16_no_uuid(
+    #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
+    mut in_db: TestMysqlDatabase,
+) {
     let mut out_db = TestPostresDatabase::new();
     in_db.execute("CREATE TABLE test (field binary(16))");
     out_db.execute("CREATE TABLE test (field bytea)");
