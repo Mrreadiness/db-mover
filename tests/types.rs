@@ -194,12 +194,8 @@ const MYSQL_BYTES_EXPECTED: &'static str = "Hello World";
 #[case("datetime", "'1001-10-19 10:23:54'", "1001-10-19 10:23:54")]
 #[case("date", "'2004-10-19'", "2004-10-19")]
 #[case("time", "'10:23:54'", "10:23:54")]
-#[case("json", r#"'{"test": 1}'"#, r#"{"test": 1}"#)]
-#[case(
-    "json",
-    r#"'[{"test": 1}, {"test": 2}]'"#,
-    r#"[{"test": 1}, {"test": 2}]"#
-)]
+#[case("json", r#"'{"test":1}'"#, r#"{"test":1}"#)]
+#[case("json", r#"'[{"test":1},{"test":2}]'"#, r#"[{"test":1},{"test":2}]"#)]
 #[case("binary(11)", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("varbinary(11)", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
 #[case("tinyblob", MYSQL_BYTES_IN, MYSQL_BYTES_EXPECTED)]
@@ -236,7 +232,13 @@ fn mysql_types_compatability(
     let mut result = out_db
         .connection
         .query_map("SELECT CAST(field AS CHAR) FROM test", |row: mysql::Row| {
-            row.get::<Option<String>, _>(0).unwrap()
+            row.get::<Option<String>, _>(0).unwrap().map(|val| {
+                // Remove formatting difference
+                if type_name == "json" {
+                    return val.replace(" ", "");
+                };
+                return val;
+            })
         })
         .unwrap();
     expected.sort();

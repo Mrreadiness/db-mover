@@ -18,17 +18,23 @@ mod value;
 pub struct MysqlDB {
     uri: String,
     connection: Conn,
+    is_mariadb: bool,
     type_options: MysqlTypeOptions,
     stmt_cache: HashMap<(String, usize, usize), mysql::Statement>,
 }
 
 impl MysqlDB {
     pub fn new(uri: &str, type_options: MysqlTypeOptions) -> anyhow::Result<Self> {
-        let connection = Self::connect(uri)?;
+        let mut connection = Self::connect(uri)?;
         debug!("Connected to mysql {uri}");
+        let version: String = connection
+            .query_first("SELECT VERSION()")
+            .context("Unable to fetch database version")?
+            .unwrap();
         return Ok(Self {
             uri: uri.to_string(),
             connection,
+            is_mariadb: version.contains("MariaDB"),
             type_options,
             stmt_cache: HashMap::new(),
         });
@@ -92,7 +98,7 @@ impl DBInfoProvider for MysqlDB {
                 .get_opt(0)
                 .context("Value expected")?
                 .context("Couldn't parse column name")?;
-            let column_type: String = row
+            let mut column_type: String = row
                 .get_opt(1)
                 .context("Value expected")?
                 .context("Couldn't parse column type")?;
@@ -100,6 +106,16 @@ impl DBInfoProvider for MysqlDB {
                 .get_opt(2)
                 .context("Value expected")?
                 .context("Couldn't parse column nullable")?;
+            if column_type == "longtext" && self.is_mariadb {
+                let num_json_constraints: usize = self.connection.exec_first(
+                    r"SELECT count(1) FROM INFORMATION_SCHEMA.check_constraints
+                    WHERE CONSTRAINT_SCHEMA = database() AND TABLE_NAME = :table AND CHECK_CLAUSE = :clause",
+                    params! {table, "clause" => format!("json_valid(`{name}`)")},
+                ).context("Failed to check json constraint")?.unwrap();
+                if num_json_constraints > 0 {
+                    column_type = String::from("json");
+                }
+            }
             columns.push(Column {
                 name,
                 column_type: ColumnType::try_from_mysql_type(&column_type, &self.type_options)?,
