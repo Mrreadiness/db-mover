@@ -187,9 +187,9 @@ impl DBWriter for PostgresDB {
         return PostgresDB::new(&self.uri).map(|writer| Box::new(writer) as _);
     }
 
-    fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {
-        let columns = self.get_columns_cached(table)?;
-        let query = format!("COPY {table} FROM STDIN WITH BINARY");
+    fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
+        let columns = self.get_columns_cached(&table.name)?;
+        let query = format!("COPY {} FROM STDIN WITH BINARY", table.name);
         let mut writer = self
             .client
             .copy_in(&query)

@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use anyhow::Context;
+use itertools::Itertools;
 use mysql::prelude::Queryable;
-use mysql::{Conn, Opts, TxOpts, params};
+use mysql::{Conn, Opts, params};
 use tracing::debug;
 pub use value::MysqlTypeOptions;
 
@@ -16,6 +19,7 @@ pub struct MysqlDB {
     uri: String,
     connection: Conn,
     type_options: MysqlTypeOptions,
+    stmt_cache: HashMap<(String, usize, usize), mysql::Statement>,
 }
 
 impl MysqlDB {
@@ -26,6 +30,7 @@ impl MysqlDB {
             uri: uri.to_string(),
             connection,
             type_options,
+            stmt_cache: HashMap::new(),
         });
     }
 
@@ -43,6 +48,27 @@ impl MysqlDB {
             .connection
             .query_first(count_query)?
             .context("Unable to get count of rows for table");
+    }
+
+    fn get_stmt(
+        &mut self,
+        table_name: &str,
+        values_per_row: usize,
+        rows: usize,
+    ) -> anyhow::Result<mysql::Statement> {
+        let key = (table_name.to_owned(), values_per_row, rows);
+        return match self.stmt_cache.get(&key) {
+            Some(stmt) => Ok(stmt.to_owned()),
+            None => {
+                let placeholder = generate_placeholders(values_per_row, rows);
+                let stmt = self
+                    .connection
+                    .prep(format!("INSERT INTO {} VALUES {placeholder}", table_name))
+                    .context("Unable to prepare insert query")?;
+                self.stmt_cache.insert(key, stmt.clone());
+                Ok(stmt)
+            }
+        };
     }
 }
 
@@ -141,23 +167,17 @@ impl DBWriter for MysqlDB {
             .map(|writer| Box::new(writer) as _);
     }
 
-    fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError> {
-        let mut trx = self
-            .connection
-            .start_transaction(TxOpts::default())
-            .context("Failed to start mysql stransaction")?;
-        let placeholder = format!(
-            "({})",
-            batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-        );
-        trx.exec_batch(
-            format!("INSERT INTO {table} VALUES {placeholder}"),
-            batch
-                .iter()
-                .map(|row| row.iter().map(mysql::Value::from).collect::<Vec<_>>()),
-        )
-        .context("Unable to insert values into mysql")?;
-        trx.commit().context("Failed to commit mysql transaction")?;
+    fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
+        let stmt = self.get_stmt(&table.name, batch[0].len(), batch.len())?;
+        let mut values = Vec::with_capacity(batch[0].len() * batch.len());
+        for row in batch {
+            for value in row {
+                values.push(mysql::Value::from(value));
+            }
+        }
+        self.connection
+            .exec_drop(stmt, mysql::Params::Positional(values))
+            .context("Unable to insert values into mysql")?;
 
         return Ok(());
     }
@@ -168,4 +188,20 @@ impl DBWriter for MysqlDB {
         debug!("Successfully reconnected to the mysql");
         return Ok(());
     }
+}
+
+fn generate_placeholders(values_per_row: usize, rows: usize) -> String {
+    use std::fmt::Write;
+
+    let block_inner = std::iter::repeat_n("?", values_per_row).join(", ");
+    let mut result = String::with_capacity(rows * (block_inner.len() + 3));
+    for i in 0..rows {
+        if i > 0 {
+            result.push(',');
+        }
+        result.push('(');
+        result.write_str(&block_inner).unwrap();
+        result.push(')');
+    }
+    result
 }

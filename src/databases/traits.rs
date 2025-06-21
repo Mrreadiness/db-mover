@@ -37,12 +37,12 @@ pub trait DBWriter: Send + DBInfoProvider {
         ));
     }
 
-    fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError>;
+    fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError>;
 
     fn write_batch_with_retry(
         &mut self,
         batch: &[Row],
-        table: &str,
+        table: &TableInfo,
         mut retry: ExponentialRetry,
     ) -> anyhow::Result<()> {
         return match self.write_batch(batch, table) {
@@ -95,11 +95,18 @@ mod tests {
             fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo>;
         }
         impl DBWriter for DB {
-            fn write_batch(&mut self, batch: &[Row], table: &str) -> Result<(), WriterError>;
+            fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError>;
             fn recover(&mut self) -> anyhow::Result<()>;
         }
     }
-    const TABLE_NAME: &str = "test";
+
+    fn make_table_info() -> TableInfo {
+        return TableInfo {
+            name: "test".to_string(),
+            columns: Vec::new(),
+            num_rows: None,
+        };
+    }
 
     #[test]
     fn test_writer_recoverable_error() {
@@ -116,10 +123,11 @@ mod tests {
             .expect_recover()
             .times(expected_retries)
             .returning(|| Ok(()));
+        let table_info = make_table_info();
 
         let result = writer.write_batch_with_retry(
             &[],
-            TABLE_NAME,
+            &table_info,
             ExponentialRetry::with_base_duration(expected_retries, Duration::from_millis(1)),
         );
         assert!(result.is_err());
@@ -139,10 +147,11 @@ mod tests {
             .returning(|_, _| Err(WriterError::Unrecoverable(anyhow::anyhow!("Test error"))));
 
         writer.expect_recover().times(0).returning(|| Ok(()));
+        let table_info = make_table_info();
 
         let result = writer.write_batch_with_retry(
             &[],
-            TABLE_NAME,
+            &table_info,
             ExponentialRetry::with_base_duration(3, Duration::from_millis(1)),
         );
         assert!(result.is_err());
@@ -167,10 +176,11 @@ mod tests {
             .expect_recover()
             .times(expected_retries)
             .returning(|| Err(anyhow::anyhow!("Test recover error")));
+        let table_info = make_table_info();
 
         let result = writer.write_batch_with_retry(
             &[],
-            TABLE_NAME,
+            &table_info,
             ExponentialRetry::with_base_duration(expected_retries, Duration::from_millis(1)),
         );
         assert!(result.is_err());

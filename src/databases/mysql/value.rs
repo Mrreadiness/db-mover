@@ -35,10 +35,16 @@ impl ColumnType {
         if formated.starts_with("binary") || formated.starts_with("varbinary") {
             return Ok(ColumnType::Bytes);
         }
+        if formated.starts_with("smallint") {
+            return Ok(ColumnType::I16);
+        }
+        if formated.starts_with("int") {
+            return Ok(ColumnType::I32);
+        }
+        if formated.starts_with("bigint") {
+            return Ok(ColumnType::I64);
+        }
         return match formated.as_str() {
-            "smallint" => Ok(ColumnType::I16),
-            "integer" | "int" => Ok(ColumnType::I32),
-            "bigint" => Ok(ColumnType::I64),
             "float" => Ok(ColumnType::F32),
             "double" | "real" | "double precision" => Ok(ColumnType::F64),
             "bool" | "boolean" => Ok(ColumnType::Bool),
