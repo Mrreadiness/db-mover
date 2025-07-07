@@ -42,6 +42,7 @@ DB Mover ensures schema compatibility by comparing the table schemas from the re
 - `I16` - 16-bit signed integer
 - `F64` - 64-bit floating-point type
 - `F32` - 32-bit floating-point type
+- `Decimal` - decimal number
 - `Bool` - logical value that can be either true or false
 - `Timestamptz` - timestamp with time zone
 - `Timestamp` - timestamp without time zone
@@ -61,6 +62,7 @@ DB Mover ensures schema compatibility by comparing the table schemas from the re
 | smallint, smallserial       | I16, I32, I64 |
 | double precision            | F64           |
 | real                        | F32, F64      |
+| decimal, numeric            | Decimal       |
 | boolean                     | Bool          |
 | timestamp with time zone    | Timestamptz   |
 | timestamp without time zone | Timestamp     |
@@ -80,6 +82,7 @@ DB Mover ensures schema compatibility by comparing the table schemas from the re
 | smallint                                                | I16, I32, I64 |                                                                                    |
 | double, double precision, real                          | F64           |                                                                                    |
 | float                                                   | F32, F64      |                                                                                    |
+| decimal, numeric                                        | Decimal       |                                                                                    |
 | boolean, bool, tinyint(1)                               | Bool          |                                                                                    |
 | timestamp                                               | Timestamptz   |                                                                                    |
 | datetime                                                | Timestamp     |                                                                                    |

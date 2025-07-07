@@ -44,6 +44,9 @@ impl ColumnType {
         if formated.starts_with("bigint") {
             return Ok(ColumnType::I64);
         }
+        if formated.starts_with("numeric") || formated.starts_with("decimal") {
+            return Ok(ColumnType::Decimal);
+        }
         return match formated.as_str() {
             "float" => Ok(ColumnType::F32),
             "double" | "real" | "double precision" => Ok(ColumnType::F64),
@@ -74,6 +77,7 @@ impl TryFrom<(&Column, mysql::Value)> for Value {
             ColumnType::I16 => Value::I16(mysql::from_value_opt(val)?),
             ColumnType::F64 => Value::F64(mysql::from_value_opt(val)?),
             ColumnType::F32 => Value::F32(mysql::from_value_opt(val)?),
+            ColumnType::Decimal => Value::Decimal(mysql::from_value_opt(val)?),
             ColumnType::Bool => Value::Bool(mysql::from_value_opt(val)?),
             ColumnType::String => Value::String(mysql::from_value_opt(val)?),
             ColumnType::Bytes => {
@@ -102,6 +106,7 @@ impl From<&Value> for mysql::Value {
             Value::I16(val) => val.into(),
             Value::F64(val) => val.into(),
             Value::F32(val) => val.into(),
+            Value::Decimal(val) => val.into(),
             Value::Bool(val) => val.into(),
             Value::String(val) => val.into(),
             Value::Bytes(val) => val.as_ref().into(),
