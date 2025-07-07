@@ -20,7 +20,10 @@ impl TryFrom<(&Column, ValueRef<'_>)> for Value {
             ColumnType::F32 => Value::F32(FromSql::column_result(val)?),
             ColumnType::Bool => Value::Bool(FromSql::column_result(val)?),
             ColumnType::String => Value::String(FromSql::column_result(val)?),
-            ColumnType::Bytes => Value::Bytes(FromSql::column_result(val)?),
+            ColumnType::Bytes => {
+                let buff: Vec<u8> = FromSql::column_result(val)?;
+                Value::Bytes(bytes::Bytes::from(buff))
+            }
             ColumnType::Timestamptz => Value::Timestamptz(FromSql::column_result(val)?),
             ColumnType::Timestamp => Value::Timestamp(FromSql::column_result(val)?),
             ColumnType::Date => Value::Date(FromSql::column_result(val)?),

@@ -104,7 +104,7 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
                 .map_or(Value::Null, Value::String),
             ColumnType::Bytes => row
                 .get::<_, Option<Vec<u8>>>(idx)
-                .map_or(Value::Null, Value::Bytes),
+                .map_or(Value::Null, |val| Value::Bytes(bytes::Bytes::from(val))),
             ColumnType::Timestamptz => row
                 .get::<_, Option<DateTime<Utc>>>(idx)
                 .map_or(Value::Null, Value::Timestamptz),

@@ -69,7 +69,7 @@ impl MysqlDB {
                 let placeholder = generate_placeholders(values_per_row, rows);
                 let stmt = self
                     .connection
-                    .prep(format!("INSERT INTO {} VALUES {placeholder}", table_name))
+                    .prep(format!("INSERT INTO {table_name} VALUES {placeholder}"))
                     .context("Unable to prepare insert query")?;
                 self.stmt_cache.insert(key, stmt.clone());
                 Ok(stmt)

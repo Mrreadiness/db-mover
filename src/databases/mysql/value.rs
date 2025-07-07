@@ -76,7 +76,9 @@ impl TryFrom<(&Column, mysql::Value)> for Value {
             ColumnType::F32 => Value::F32(mysql::from_value_opt(val)?),
             ColumnType::Bool => Value::Bool(mysql::from_value_opt(val)?),
             ColumnType::String => Value::String(mysql::from_value_opt(val)?),
-            ColumnType::Bytes => Value::Bytes(mysql::from_value_opt(val)?),
+            ColumnType::Bytes => {
+                Value::Bytes(bytes::Bytes::from(mysql::from_value_opt::<Vec<u8>>(val)?))
+            }
             ColumnType::Timestamp => Value::Timestamp(mysql::from_value_opt(val)?),
             ColumnType::Timestamptz => {
                 let dt: NaiveDateTime = mysql::from_value_opt(val)?;
@@ -102,7 +104,7 @@ impl From<&Value> for mysql::Value {
             Value::F32(val) => val.into(),
             Value::Bool(val) => val.into(),
             Value::String(val) => val.into(),
-            Value::Bytes(val) => val.into(),
+            Value::Bytes(val) => val.as_ref().into(),
             Value::Timestamptz(val) => val.naive_utc().into(),
             Value::Timestamp(val) => val.into(),
             Value::Date(val) => val.into(),

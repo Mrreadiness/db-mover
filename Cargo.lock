@@ -562,6 +562,7 @@ name = "db-mover"
 version = "0.3.1"
 dependencies = [
  "anyhow",
+ "bytes",
  "chrono",
  "clap",
  "criterion",

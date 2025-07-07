@@ -4,7 +4,7 @@ use std::str::FromStr;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     String(String),
-    Bytes(Vec<u8>),
+    Bytes(bytes::Bytes),
     I64(i64),
     I32(i32),
     I16(i16),
