@@ -1,4 +1,5 @@
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+use rust_decimal::Decimal;
 use std::str::FromStr;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -10,6 +11,7 @@ pub enum Value {
     I16(i16),
     F64(f64),
     F32(f32),
+    Decimal(Decimal),
     Bool(bool),
     Timestamptz(DateTime<Utc>),
     Timestamp(NaiveDateTime),
@@ -31,6 +33,7 @@ pub enum ColumnType {
     I16,
     F64,
     F32,
+    Decimal,
     Bool,
     Timestamptz,
     Timestamp,

@@ -30,6 +30,9 @@ impl TryFrom<(&Column, ValueRef<'_>)> for Value {
             ColumnType::Time => Value::Time(FromSql::column_result(val)?),
             ColumnType::Json => Value::Json(FromSql::column_result(val)?),
             ColumnType::Uuid => Value::Uuid(FromSql::column_result(val)?),
+            ColumnType::Decimal => {
+                return Err(anyhow::anyhow!("Decimal is not supported for sqlite"));
+            }
         };
         return Ok(parsed);
     }
@@ -53,6 +56,11 @@ impl ToSql for Value {
             Value::Time(val) => val.to_sql(),
             Value::Json(val) => val.to_sql(),
             Value::Uuid(val) => val.to_sql(),
+            Value::Decimal(_) => {
+                return Err(rusqlite::Error::ToSqlConversionFailure(
+                    anyhow::anyhow!("Decimal is not supported for sqlite").into(),
+                ));
+            }
         }
     }
 }

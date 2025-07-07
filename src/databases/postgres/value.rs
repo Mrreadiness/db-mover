@@ -2,7 +2,8 @@ use std::io::Write;
 
 use anyhow::Context;
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
-use postgres::types::Type;
+use postgres::types::{ToSql, Type};
+use rust_decimal::Decimal;
 
 use crate::databases::{
     table::{Column, ColumnType, Value},
@@ -19,6 +20,7 @@ impl TryFrom<Type> for ColumnType {
             Type::INT2 => ColumnType::I16,
             Type::FLOAT8 => ColumnType::F64,
             Type::FLOAT4 => ColumnType::F32,
+            Type::NUMERIC => ColumnType::Decimal,
             Type::BOOL => ColumnType::Bool,
             Type::VARCHAR | Type::TEXT | Type::BPCHAR => ColumnType::String,
             Type::BYTEA => ColumnType::Bytes,
@@ -96,6 +98,9 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::F32 => row
                 .get::<_, Option<f32>>(idx)
                 .map_or(Value::Null, Value::F32),
+            ColumnType::Decimal => row
+                .get::<_, Option<Decimal>>(idx)
+                .map_or(Value::Null, Value::Decimal),
             ColumnType::Bool => row
                 .get::<_, Option<bool>>(idx)
                 .map_or(Value::Null, Value::Bool),
@@ -162,6 +167,13 @@ impl Value {
             &Value::F32(num) => {
                 writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
+            }
+            &Value::Decimal(num) => {
+                let mut buffer = bytes::BytesMut::new();
+                num.to_sql(&Type::NUMERIC, &mut buffer)
+                    .map_err(anyhow::Error::from_boxed)?;
+                writer.write_all(&(buffer.len() as i32).to_be_bytes())?;
+                writer.write_all(&buffer)?;
             }
             &Value::Bool(val) => {
                 let val = u8::from(val);
