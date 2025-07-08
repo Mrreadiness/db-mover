@@ -97,6 +97,19 @@ impl DBInfoProvider for SqliteDB {
             columns,
         });
     }
+
+    fn get_tables(&mut self) -> anyhow::Result<Vec<String>> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+            .context("Failed to create query for reading table list")?;
+        let mut rows = stmt.query([]).context("Failed to query table list")?;
+        let mut tables = Vec::new();
+        while let Some(row) = rows.next().context("Failed to fetch table list")? {
+            tables.push(row.get(0).context("Failed to parse table name")?);
+        }
+        return Ok(tables);
+    }
 }
 
 #[ouroboros::self_referencing]

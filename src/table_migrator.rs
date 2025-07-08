@@ -256,6 +256,7 @@ mod tests {
         DB {}
 
         impl DBInfoProvider for DB {
+            fn get_tables(&mut self) -> anyhow::Result<Vec<String>>;
             fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo>;
         }
         impl DBReader for DB {

@@ -125,6 +125,23 @@ impl DBInfoProvider for PostgresDB {
             columns,
         });
     }
+
+    fn get_tables(&mut self) -> anyhow::Result<Vec<String>> {
+        let rows = self
+            .client
+            .query(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema",
+                &[]
+            )
+            .context("Failed to query tables")?;
+        return rows
+            .iter()
+            .map(|row| {
+                row.try_get::<_, String>(0)
+                    .context("Failed to read table name")
+            })
+            .collect::<anyhow::Result<Vec<String>>>();
+    }
 }
 
 struct PostgresRowsIter<'a> {
