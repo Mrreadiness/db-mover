@@ -31,11 +31,15 @@ impl TestSqliteDatabase {
             tmp_dir,
         };
     }
+
+    pub fn get_uri_raw(&self) -> String {
+        return format!("sqlite://{}", self.path.to_str().unwrap());
+    }
 }
 
 impl TestableDatabase for TestSqliteDatabase {
     fn get_uri(&self) -> URI {
-        return URI::Sqlite(format!("sqlite://{}", self.path.to_str().unwrap()));
+        return URI::Sqlite(self.get_uri_raw());
     }
 
     fn execute(&mut self, query: impl AsRef<str>) {

@@ -19,7 +19,7 @@ pub struct Args {
     #[arg(long, short)]
     pub output: URI,
 
-    /// List of tables
+    /// List of tables. By default all tables from the input database
     #[arg(long, short)]
     pub table: Vec<String>,
 

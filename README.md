@@ -11,7 +11,7 @@ cargo install db-mover
 ## Usage
 
 ```bash
-db-mover --input "sqlite://input.db" --output "postgres://postgres@localhost/postgres" --table "table_name"
+db-mover --input "sqlite://input.db" --output "postgres://postgres@localhost/postgres"
 ```
 
 Use help for options descriptions

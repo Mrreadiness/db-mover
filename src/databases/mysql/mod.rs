@@ -129,6 +129,20 @@ impl DBInfoProvider for MysqlDB {
             columns,
         });
     }
+
+    fn get_tables(&mut self) -> anyhow::Result<Vec<String>> {
+        let rows: Vec<mysql::Row> = self.connection.query(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = database()",
+        )?;
+        return rows
+            .iter()
+            .map(|row| {
+                row.get_opt(0)
+                    .context("Value expected")?
+                    .context("Couldn't parse table name")
+            })
+            .collect::<anyhow::Result<Vec<String>>>();
+    }
 }
 
 struct MysqlRowsIter<'a> {

@@ -178,8 +178,8 @@ impl TableMigrationProgress {
     }
 
     fn log(&self) {
-        info!("Reading table {} {}", self.table, self.reader);
-        info!("Writing table {} {}", self.table, self.writer);
+        info!("Reading table \"{}\" {}", self.table, self.reader);
+        info!("Writing table \"{}\" {}", self.table, self.writer);
     }
 }
 

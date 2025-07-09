@@ -64,7 +64,7 @@ impl TableMigrator {
         table: &str,
         settings: TableMigratorSettings,
     ) -> anyhow::Result<TableMigrator> {
-        info!("Collecting info about table {table}");
+        info!("Collecting info about table \"{table}\"");
         let reader_table_info = reader
             .get_table_info(table, settings.no_count)
             .context("Unable to get information about source table")?;
@@ -72,7 +72,7 @@ impl TableMigrator {
             .get_table_info(table, false)
             .context("Unable to get information about destination table")?;
         Self::check_table_compatibility(&reader_table_info, &writer_table_info)?;
-        info!("Table {table} has passed compatability checks");
+        info!("Table \"{table}\" has passed compatability checks");
         let mut writers = Vec::new();
         if settings.writer_workers > 1 {
             for _ in 0..settings.writer_workers {
@@ -101,7 +101,7 @@ impl TableMigrator {
     ) -> anyhow::Result<()> {
         if writer_info.num_rows != Some(0) {
             return Err(anyhow::anyhow!(
-                "Destination table ({}) should be empty",
+                "Destination table \"{}\" should be empty",
                 &writer_info.name
             ));
         }
@@ -110,7 +110,7 @@ impl TableMigrator {
         let mut writer_columns: Vec<&Column> = writer_info.columns.iter().collect();
         writer_columns.sort_by(|l, r| r.name.cmp(&l.name));
         let err = Err(anyhow::anyhow!(
-            "Incompatable set of columns for table {}.\n\
+            "Incompatable set of columns for table \"{}\".\n\
                 In: {reader_columns:?}\n\
                 Out: {writer_columns:?}",
             &writer_info.name
@@ -198,7 +198,7 @@ impl TableMigrator {
                 Err(e)
             }
         };
-        info!("Start moving data of table {}", self.target_format.name);
+        info!("Start moving data of table \"{}\"", self.target_format.name);
         return std::thread::scope(|s| {
             let mut handles = Vec::new();
             handles.push(s.spawn(|| {
@@ -256,6 +256,7 @@ mod tests {
         DB {}
 
         impl DBInfoProvider for DB {
+            fn get_tables(&mut self) -> anyhow::Result<Vec<String>>;
             fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo>;
         }
         impl DBReader for DB {
