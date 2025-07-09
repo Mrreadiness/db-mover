@@ -168,7 +168,7 @@ fn nullable_to_non_nullable(mut in_db: impl TestableDatabase, mut out_db: impl T
     let err = result.unwrap_err();
     assert!(
         err.to_string()
-            .contains("Incompatable set of columns for table test"),
+            .contains("Incompatable set of columns for table \"test\""),
         "{:?}",
         err,
     );
