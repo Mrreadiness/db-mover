@@ -91,6 +91,21 @@ fn multiple_tables(mut in_db: impl TestableDatabase, mut out_db: impl TestableDa
 }
 
 #[apply(all_databases_combinations)]
+fn auto_detect_tables(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+    create_test_tables(&mut in_db, &mut out_db);
+    in_db.fill_test_table("test", 10);
+    in_db.fill_test_table("test1", 10);
+    assert_ne!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
+    assert_ne!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
+
+    let args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
+    db_mover::run(args).unwrap();
+
+    assert_eq!(in_db.get_all_rows("test"), out_db.get_all_rows("test"));
+    assert_eq!(in_db.get_all_rows("test1"), out_db.get_all_rows("test1"));
+}
+
+#[apply(all_databases_combinations)]
 fn in_table_not_found(in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
@@ -134,7 +149,7 @@ fn different_set_of_columnds(mut in_db: impl TestableDatabase, mut out_db: impl 
     let err = result.unwrap_err();
     assert!(
         err.to_string()
-            .contains("Incompatable set of columns for table test"),
+            .contains("Incompatable set of columns for table \"test\""),
         "{:?}",
         err,
     );
