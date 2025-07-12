@@ -5,7 +5,8 @@ use rusqlite::{Connection, OpenFlags, params_from_iter};
 use tracing::debug;
 
 use crate::databases::{
-    table::{Row, Value},
+    sqlite::value::{DefaultTypeConvertor, SqliteFromData, SqliteToData, SqliteTypesConvertor},
+    table::Row,
     traits::{DBInfoProvider, DBReader, DBWriter},
 };
 
@@ -52,7 +53,8 @@ impl SqliteDB {
         return Ok(result);
     }
 
-    fn write_batch_impl(&mut self, batch: &[Row], table: &str) -> anyhow::Result<()> {
+    fn write_batch_impl(&mut self, batch: &[Row], table_info: &TableInfo) -> anyhow::Result<()> {
+        let type_convertor = DefaultTypeConvertor {};
         let trx = self
             .connection
             .transaction()
@@ -62,13 +64,25 @@ impl SqliteDB {
                 "({})",
                 batch[0].iter().map(|_| "?").collect::<Vec<_>>().join(", ")
             );
-            let query = format!("INSERT INTO {table} VALUES {placeholder}");
+            let query = format!("INSERT INTO {} VALUES {placeholder}", table_info.name);
             let mut stmt = trx
                 .prepare(&query)
                 .context("Failed to create write query")?;
             for row in batch {
-                stmt.execute(params_from_iter(row.iter()))
-                    .context("Failed to write data")?;
+                let params = std::iter::zip(row, &table_info.columns).map(|(value, column)| {
+                    type_convertor
+                        .sqlite_to(SqliteToData {
+                            table: &table_info.name,
+                            column,
+                            value,
+                        })
+                        .context("Faild to convert data for sqlite")
+                });
+                itertools::process_results(params, |params| -> anyhow::Result<()> {
+                    stmt.execute(params_from_iter(params))
+                        .context("Failed to write data")?;
+                    Ok(())
+                })??;
             }
         }
         trx.commit().context("Failed to commit")?;
@@ -126,6 +140,7 @@ impl Iterator for SqliteRowsIter<'_> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let type_convertor = DefaultTypeConvertor {};
         self.with_mut(
             |fields| match fields.rows.next().context("Failed to read a row") {
                 Ok(Some(row)) => {
@@ -136,7 +151,13 @@ impl Iterator for SqliteRowsIter<'_> {
                             .get_ref(idx)
                             .context("Failed to read data from the row")
                             .and_then(|raw| {
-                                Value::try_from((column, raw)).context("Failed to parse input data")
+                                type_convertor
+                                    .sqlite_from(SqliteFromData {
+                                        table: &fields.target_format.name,
+                                        column,
+                                        value: raw,
+                                    })
+                                    .context("Failed to parse input data")
                             }) {
                             Ok(value) => result.push(value),
                             Err(e) => return Some(Err(e)),
@@ -178,7 +199,7 @@ impl DBWriter for SqliteDB {
     fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
         // SQLite is not network dependent, assume that all errors are Unrecoverable
         return self
-            .write_batch_impl(batch, &table.name)
+            .write_batch_impl(batch, table)
             .map_err(WriterError::Unrecoverable);
     }
 
