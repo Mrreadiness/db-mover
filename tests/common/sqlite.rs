@@ -10,13 +10,17 @@ use super::{gen_database_name, row::TestRow, testable_database::TestableDatabase
 pub struct TestSqliteDatabase {
     pub path: PathBuf,
     pub conn: Connection,
-    tmp_dir: TempDir,
+    tmp_dir: Option<TempDir>,
 }
 
 impl TestSqliteDatabase {
     pub fn new() -> Self {
         let tmp_dir = tempfile::tempdir().unwrap();
         let path = tmp_dir.path().join(gen_database_name());
+        return Self::from_path(path, Some(tmp_dir));
+    }
+
+    pub fn from_path(path: PathBuf, tmp_dir: Option<TempDir>) -> Self {
         let conn = Connection::open_with_flags(
             path.clone(),
             OpenFlags::SQLITE_OPEN_READ_WRITE
