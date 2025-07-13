@@ -4,10 +4,13 @@ use anyhow::Context;
 use rusqlite::{Connection, OpenFlags, params_from_iter};
 use tracing::debug;
 
-use crate::databases::{
-    sqlite::value::{DefaultTypeConvertor, SqliteFromData, SqliteToData, SqliteTypesConvertor},
-    table::Row,
-    traits::{DBInfoProvider, DBReader, DBWriter},
+use crate::{
+    databases::{
+        sqlite::value::{SqliteFromData, SqliteToData, SqliteTypeConvertor},
+        table::Row,
+        traits::{DBInfoProvider, DBReader, DBWriter},
+    },
+    type_convetor::DefaultTypeConvertor,
 };
 
 use super::{
@@ -15,13 +18,14 @@ use super::{
     traits::{ReaderIterator, WriterError},
 };
 
-mod value;
+pub mod value;
 
-pub struct SqliteDB {
+pub struct SqliteDB<T: SqliteTypeConvertor = DefaultTypeConvertor> {
     connection: Connection,
+    _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl SqliteDB {
+impl<T: SqliteTypeConvertor> SqliteDB<T> {
     pub fn new(uri: &str) -> anyhow::Result<Self> {
         let path = uri.replace("sqlite://", "");
         let conn = Connection::open_with_flags(
@@ -31,7 +35,10 @@ impl SqliteDB {
                 | OpenFlags::SQLITE_OPEN_URI,
         )?;
         debug!("Connected to sqlite {uri}");
-        return Ok(SqliteDB { connection: conn });
+        return Ok(SqliteDB {
+            connection: conn,
+            _type_convetor: std::marker::PhantomData,
+        });
     }
 
     fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<Column>> {
@@ -54,7 +61,6 @@ impl SqliteDB {
     }
 
     fn write_batch_impl(&mut self, batch: &[Row], table_info: &TableInfo) -> anyhow::Result<()> {
-        let type_convertor = DefaultTypeConvertor {};
         let trx = self
             .connection
             .transaction()
@@ -70,13 +76,12 @@ impl SqliteDB {
                 .context("Failed to create write query")?;
             for row in batch {
                 let params = std::iter::zip(row, &table_info.columns).map(|(value, column)| {
-                    type_convertor
-                        .sqlite_to(SqliteToData {
-                            table: &table_info.name,
-                            column,
-                            value,
-                        })
-                        .context("Faild to convert data for sqlite")
+                    T::sqlite_to(SqliteToData {
+                        table: &table_info.name,
+                        column,
+                        value,
+                    })
+                    .context("Faild to convert data for sqlite")
                 });
                 itertools::process_results(params, |params| -> anyhow::Result<()> {
                     stmt.execute(params_from_iter(params))
@@ -90,7 +95,7 @@ impl SqliteDB {
     }
 }
 
-impl DBInfoProvider for SqliteDB {
+impl<T: SqliteTypeConvertor> DBInfoProvider for SqliteDB<T> {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
@@ -127,20 +132,20 @@ impl DBInfoProvider for SqliteDB {
 }
 
 #[ouroboros::self_referencing]
-struct SqliteRowsIter<'a> {
+struct SqliteRowsIter<'a, T: SqliteTypeConvertor> {
     target_format: TableInfo,
     stmt: rusqlite::Statement<'a>,
+    type_convetor: std::marker::PhantomData<T>,
 
     #[borrows(mut stmt)]
     #[covariant]
     rows: rusqlite::Rows<'this>,
 }
 
-impl Iterator for SqliteRowsIter<'_> {
+impl<T: SqliteTypeConvertor> Iterator for SqliteRowsIter<'_, T> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let type_convertor = DefaultTypeConvertor {};
         self.with_mut(
             |fields| match fields.rows.next().context("Failed to read a row") {
                 Ok(Some(row)) => {
@@ -151,13 +156,12 @@ impl Iterator for SqliteRowsIter<'_> {
                             .get_ref(idx)
                             .context("Failed to read data from the row")
                             .and_then(|raw| {
-                                type_convertor
-                                    .sqlite_from(SqliteFromData {
-                                        table: &fields.target_format.name,
-                                        column,
-                                        value: raw,
-                                    })
-                                    .context("Failed to parse input data")
+                                T::sqlite_from(SqliteFromData {
+                                    table: &fields.target_format.name,
+                                    column,
+                                    value: raw,
+                                })
+                                .context("Failed to parse input data")
                             }) {
                             Ok(value) => result.push(value),
                             Err(e) => return Some(Err(e)),
@@ -172,7 +176,7 @@ impl Iterator for SqliteRowsIter<'_> {
     }
 }
 
-impl DBReader for SqliteDB {
+impl<T: SqliteTypeConvertor> DBReader for SqliteDB<T> {
     fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
         let query = format!(
             "SELECT {} FROM {}",
@@ -186,6 +190,7 @@ impl DBReader for SqliteDB {
         let iterator = SqliteRowsIterTryBuilder {
             target_format,
             stmt,
+            type_convetor: std::marker::PhantomData::<T>,
             rows_builder: |stmt| {
                 return stmt.query([]).context("Failed to read rows");
             },
@@ -195,7 +200,7 @@ impl DBReader for SqliteDB {
     }
 }
 
-impl DBWriter for SqliteDB {
+impl<T: SqliteTypeConvertor> DBWriter for SqliteDB<T> {
     fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
         // SQLite is not network dependent, assume that all errors are Unrecoverable
         return self

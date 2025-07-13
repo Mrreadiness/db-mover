@@ -1,4 +1,7 @@
-use crate::databases::table::{Column, ColumnType, Value};
+use crate::{
+    databases::table::{Column, ColumnType, Value},
+    type_convetor::DefaultTypeConvertor,
+};
 use rusqlite::{
     ToSql,
     types::{FromSql, ToSqlOutput, ValueRef},
@@ -18,10 +21,8 @@ pub struct SqliteToData<'a> {
     pub value: &'a Value,
 }
 
-pub struct DefaultTypeConvertor;
-
-pub trait SqliteTypesConvertor<'a> {
-    fn sqlite_from(&self, data: SqliteFromData) -> anyhow::Result<Value> {
+pub trait SqliteTypeConvertor: Send {
+    fn sqlite_from(data: SqliteFromData) -> anyhow::Result<Value> {
         if data.value == ValueRef::Null {
             return Ok(Value::Null);
         }
@@ -50,7 +51,7 @@ pub trait SqliteTypesConvertor<'a> {
         return Ok(parsed);
     }
 
-    fn sqlite_to(&self, data: SqliteToData<'a>) -> anyhow::Result<ToSqlOutput<'a>> {
+    fn sqlite_to(data: SqliteToData<'_>) -> anyhow::Result<ToSqlOutput<'_>> {
         let output = match data.value {
             Value::Null => ToSqlOutput::from(rusqlite::types::Null),
             Value::I64(val) => val.to_sql()?,
@@ -75,7 +76,7 @@ pub trait SqliteTypesConvertor<'a> {
     }
 }
 
-impl SqliteTypesConvertor<'_> for DefaultTypeConvertor {}
+impl SqliteTypeConvertor for DefaultTypeConvertor {}
 
 impl ToSql for Value {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {

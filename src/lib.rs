@@ -7,6 +7,7 @@ pub mod databases;
 pub mod progress;
 pub mod retry;
 pub mod table_migrator;
+pub mod type_convetor;
 pub mod uri;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
