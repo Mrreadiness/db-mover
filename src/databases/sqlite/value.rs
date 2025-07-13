@@ -1,6 +1,6 @@
 use crate::{
     databases::table::{Column, ColumnType, Value},
-    type_convetor::DefaultTypeConvertor,
+    type_convertor::DefaultTypeConvertor,
 };
 use rusqlite::{
     ToSql,

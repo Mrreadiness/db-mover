@@ -10,7 +10,7 @@ use crate::{
         table::Row,
         traits::{DBInfoProvider, DBReader, DBWriter},
     },
-    type_convetor::DefaultTypeConvertor,
+    type_convertor::DefaultTypeConvertor,
 };
 
 use super::{
