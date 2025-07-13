@@ -75,30 +75,3 @@ pub trait SqliteTypeConvertor: Send {
 }
 
 impl SqliteTypeConvertor for DefaultTypeConvertor {}
-
-impl ToSql for Value {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        match self {
-            Value::Null => Ok(ToSqlOutput::from(rusqlite::types::Null)),
-            Value::I64(val) => val.to_sql(),
-            Value::I32(val) => val.to_sql(),
-            Value::I16(val) => val.to_sql(),
-            Value::F64(val) => val.to_sql(),
-            Value::F32(val) => val.to_sql(),
-            Value::Bool(val) => val.to_sql(),
-            Value::String(val) => val.to_sql(),
-            Value::Bytes(val) => val.to_sql(),
-            Value::Timestamptz(val) => val.to_sql(),
-            Value::Timestamp(val) => val.to_sql(),
-            Value::Date(val) => val.to_sql(),
-            Value::Time(val) => val.to_sql(),
-            Value::Json(val) => val.to_sql(),
-            Value::Uuid(val) => val.to_sql(),
-            Value::Decimal(_) => {
-                return Err(rusqlite::Error::ToSqlConversionFailure(
-                    anyhow::anyhow!("Decimal is not supported for sqlite").into(),
-                ));
-            }
-        }
-    }
-}
