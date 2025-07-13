@@ -4,12 +4,10 @@ use anyhow::Context;
 use rusqlite::{Connection, OpenFlags, params_from_iter};
 use tracing::debug;
 
-use crate::{
-    databases::{
-        sqlite::value::{SqliteFromData, SqliteToData, SqliteTypeConvertor},
-        table::Row,
-        traits::{DBInfoProvider, DBReader, DBWriter},
-    },
+use crate::databases::{
+    sqlite::value::{SqliteFromData, SqliteToData, SqliteTypeConvertor},
+    table::Row,
+    traits::{DBInfoProvider, DBReader, DBWriter},
     type_convertor::DefaultTypeConvertor,
 };
 

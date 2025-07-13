@@ -1,7 +1,10 @@
 use anyhow::Context;
 use tracing::info;
 
-use crate::type_convertor::{DefaultTypeConvertor, TypeConvetor};
+use crate::databases::{
+    factory::DBFactory,
+    type_convertor::{DefaultTypeConvertor, TypeConvetor},
+};
 
 pub mod args;
 pub mod channel;
@@ -9,7 +12,6 @@ pub mod databases;
 pub mod progress;
 pub mod retry;
 pub mod table_migrator;
-pub mod type_convertor;
 pub mod uri;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
@@ -17,10 +19,11 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
 }
 
 pub fn run_with<T: TypeConvetor>(args: args::Args) -> anyhow::Result<()> {
-    let tables = get_tables::<T>(&args)?;
+    let factory: DBFactory<T> = DBFactory::default();
+    let tables = get_tables(&args, &factory)?;
     for table in &tables {
-        let reader = args.create_reader::<T>()?;
-        let writer = args.create_writer::<T>()?;
+        let reader = factory.create_reader(&args)?;
+        let writer = factory.create_writer(&args)?;
         info!("Processing table \"{table}\"");
         let migrator = table_migrator::TableMigrator::new(reader, writer, table, (&args).into())?;
         if !args.dry_run {
@@ -31,10 +34,13 @@ pub fn run_with<T: TypeConvetor>(args: args::Args) -> anyhow::Result<()> {
     return Ok(());
 }
 
-fn get_tables<T: TypeConvetor>(args: &args::Args) -> anyhow::Result<Vec<String>> {
+fn get_tables(
+    args: &args::Args,
+    factory: &DBFactory<impl TypeConvetor>,
+) -> anyhow::Result<Vec<String>> {
     let tables = match args.table.len() {
         0 => {
-            let mut reader = args.create_reader::<T>()?;
+            let mut reader = factory.create_reader(args)?;
             reader
                 .get_tables()
                 .context("Failed to get list of tables from input database")?
@@ -50,7 +56,7 @@ fn get_tables<T: TypeConvetor>(args: &args::Args) -> anyhow::Result<Vec<String>>
             .join(", ")
     );
     let writer_tables = {
-        let mut writer = args.create_writer::<T>()?;
+        let mut writer = factory.create_writer(args)?;
         writer
             .get_tables()
             .context("Failed to get list of tables from output database")?

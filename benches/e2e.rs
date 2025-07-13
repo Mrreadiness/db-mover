@@ -1,6 +1,6 @@
 use std::{env, sync::LazyLock};
 
-use db_mover::{self, type_convertor::DefaultTypeConvertor, uri::URI};
+use db_mover::{self, uri::URI};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 

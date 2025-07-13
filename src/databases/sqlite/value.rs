@@ -1,7 +1,5 @@
-use crate::{
-    databases::table::{Column, ColumnType, Value},
-    type_convertor::DefaultTypeConvertor,
-};
+use crate::databases::table::{Column, ColumnType, Value};
+use crate::databases::type_convertor::DefaultTypeConvertor;
 use rusqlite::{
     ToSql,
     types::{FromSql, ToSqlOutput, ValueRef},
