@@ -37,7 +37,7 @@ impl<T: TypeConvetor> DBFactory<T> {
         ));
     }
 
-    fn build_mysql(&self, uri: &str, args: &Args) -> anyhow::Result<Box<MysqlDB>> {
+    fn build_mysql(&self, uri: &str, args: &Args) -> anyhow::Result<Box<MysqlDB<T>>> {
         let options = MysqlTypeOptions {
             binary_16_as_uuid: !args.no_mysql_binary_16_as_uuid,
             ..Default::default()

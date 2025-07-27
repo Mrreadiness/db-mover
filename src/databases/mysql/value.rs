@@ -63,43 +63,50 @@ impl ColumnType {
     }
 }
 
-impl TryFrom<(&Column, mysql::Value)> for Value {
-    type Error = anyhow::Error;
+pub struct MysqlFromData<'a> {
+    pub table: &'a str,
+    pub column: &'a Column,
+    pub value: mysql::Value,
+}
 
-    fn try_from(value: (&Column, mysql::Value)) -> Result<Self, Self::Error> {
-        let (column, val) = value;
-        if val == mysql::Value::NULL {
+pub struct MysqlToData<'a> {
+    pub table: &'a str,
+    pub column: &'a Column,
+    pub value: &'a Value,
+}
+
+pub trait MysqlTypeConvertor: Send + 'static {
+    fn mysql_from(data: MysqlFromData) -> anyhow::Result<Value> {
+        if data.value == mysql::Value::NULL {
             return Ok(Value::Null);
         }
-        let parsed = match column.column_type {
-            ColumnType::I64 => Value::I64(mysql::from_value_opt(val)?),
-            ColumnType::I32 => Value::I32(mysql::from_value_opt(val)?),
-            ColumnType::I16 => Value::I16(mysql::from_value_opt(val)?),
-            ColumnType::F64 => Value::F64(mysql::from_value_opt(val)?),
-            ColumnType::F32 => Value::F32(mysql::from_value_opt(val)?),
-            ColumnType::Decimal => Value::Decimal(mysql::from_value_opt(val)?),
-            ColumnType::Bool => Value::Bool(mysql::from_value_opt(val)?),
-            ColumnType::String => Value::String(mysql::from_value_opt(val)?),
-            ColumnType::Bytes => {
-                Value::Bytes(bytes::Bytes::from(mysql::from_value_opt::<Vec<u8>>(val)?))
-            }
-            ColumnType::Timestamp => Value::Timestamp(mysql::from_value_opt(val)?),
+        let parsed = match data.column.column_type {
+            ColumnType::I64 => Value::I64(mysql::from_value_opt(data.value)?),
+            ColumnType::I32 => Value::I32(mysql::from_value_opt(data.value)?),
+            ColumnType::I16 => Value::I16(mysql::from_value_opt(data.value)?),
+            ColumnType::F64 => Value::F64(mysql::from_value_opt(data.value)?),
+            ColumnType::F32 => Value::F32(mysql::from_value_opt(data.value)?),
+            ColumnType::Decimal => Value::Decimal(mysql::from_value_opt(data.value)?),
+            ColumnType::Bool => Value::Bool(mysql::from_value_opt(data.value)?),
+            ColumnType::String => Value::String(mysql::from_value_opt(data.value)?),
+            ColumnType::Bytes => Value::Bytes(bytes::Bytes::from(
+                mysql::from_value_opt::<Vec<u8>>(data.value)?,
+            )),
+            ColumnType::Timestamp => Value::Timestamp(mysql::from_value_opt(data.value)?),
             ColumnType::Timestamptz => {
-                let dt: NaiveDateTime = mysql::from_value_opt(val)?;
+                let dt: NaiveDateTime = mysql::from_value_opt(data.value)?;
                 Value::Timestamptz(Utc.from_utc_datetime(&dt)) // UTC timezone set on connection
             }
-            ColumnType::Date => Value::Date(mysql::from_value_opt(val)?),
-            ColumnType::Time => Value::Time(mysql::from_value_opt(val)?),
-            ColumnType::Json => Value::Json(mysql::from_value_opt(val)?),
-            ColumnType::Uuid => Value::Uuid(mysql::from_value_opt(val)?),
+            ColumnType::Date => Value::Date(mysql::from_value_opt(data.value)?),
+            ColumnType::Time => Value::Time(mysql::from_value_opt(data.value)?),
+            ColumnType::Json => Value::Json(mysql::from_value_opt(data.value)?),
+            ColumnType::Uuid => Value::Uuid(mysql::from_value_opt(data.value)?),
         };
         return Ok(parsed);
     }
-}
 
-impl From<&Value> for mysql::Value {
-    fn from(value: &Value) -> Self {
-        match value {
+    fn mysql_to(data: MysqlToData<'_>) -> anyhow::Result<mysql::Value> {
+        let result = match data.value {
             Value::Null => mysql::Value::NULL,
             Value::I64(val) => val.into(),
             Value::I32(val) => val.into(),
@@ -116,6 +123,7 @@ impl From<&Value> for mysql::Value {
             Value::Time(val) => val.into(),
             Value::Json(val) => val.into(),
             Value::Uuid(val) => val.into(),
-        }
+        };
+        return Ok(result);
     }
 }

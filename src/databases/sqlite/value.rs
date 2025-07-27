@@ -1,25 +1,22 @@
 use crate::databases::table::{Column, ColumnType, Value};
-use crate::databases::type_convertor::DefaultTypeConvertor;
 use rusqlite::{
     ToSql,
     types::{FromSql, ToSqlOutput, ValueRef},
 };
 
-#[allow(dead_code)]
 pub struct SqliteFromData<'a> {
     pub table: &'a str,
     pub column: &'a Column,
     pub value: ValueRef<'a>,
 }
 
-#[allow(dead_code)]
 pub struct SqliteToData<'a> {
     pub table: &'a str,
     pub column: &'a Column,
     pub value: &'a Value,
 }
 
-pub trait SqliteTypeConvertor: Send {
+pub trait SqliteTypeConvertor: Send + 'static {
     fn sqlite_from(data: SqliteFromData) -> anyhow::Result<Value> {
         if data.value == ValueRef::Null {
             return Ok(Value::Null);
@@ -73,5 +70,3 @@ pub trait SqliteTypeConvertor: Send {
         return Ok(output);
     }
 }
-
-impl SqliteTypeConvertor for DefaultTypeConvertor {}

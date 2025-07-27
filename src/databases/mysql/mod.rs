@@ -7,23 +7,26 @@ use mysql::{Conn, Opts, params};
 use tracing::debug;
 pub use value::MysqlTypeOptions;
 
-use crate::databases::table::{Row, Value};
+use crate::databases::mysql::value::{MysqlToData, MysqlTypeConvertor};
+use crate::databases::table::Row;
 use crate::databases::traits::{DBInfoProvider, DBReader};
+use crate::databases::type_convertor::DefaultTypeConvertor;
 
 use super::table::{Column, ColumnType, TableInfo};
 use super::traits::{DBWriter, ReaderIterator, WriterError};
 
-mod value;
+pub mod value;
 
-pub struct MysqlDB {
+pub struct MysqlDB<T: MysqlTypeConvertor = DefaultTypeConvertor> {
     uri: String,
     connection: Conn,
     is_mariadb: bool,
     type_options: MysqlTypeOptions,
     stmt_cache: HashMap<(String, usize, usize), mysql::Statement>,
+    _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl MysqlDB {
+impl<T: MysqlTypeConvertor> MysqlDB<T> {
     pub fn new(uri: &str, type_options: MysqlTypeOptions) -> anyhow::Result<Self> {
         let mut connection = Self::connect(uri)?;
         debug!("Connected to mysql {uri}");
@@ -37,6 +40,7 @@ impl MysqlDB {
             is_mariadb: version.contains("MariaDB"),
             type_options,
             stmt_cache: HashMap::new(),
+            _type_convetor: std::marker::PhantomData,
         });
     }
 
@@ -78,7 +82,7 @@ impl MysqlDB {
     }
 }
 
-impl DBInfoProvider for MysqlDB {
+impl<T: MysqlTypeConvertor> DBInfoProvider for MysqlDB<T> {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
@@ -145,12 +149,14 @@ impl DBInfoProvider for MysqlDB {
     }
 }
 
-struct MysqlRowsIter<'a> {
+struct MysqlRowsIter<'a, T: MysqlTypeConvertor> {
     target_format: TableInfo,
     rows: mysql::QueryResult<'a, 'a, 'a, mysql::Text>,
+
+    type_convetor: std::marker::PhantomData<T>,
 }
 
-impl Iterator for MysqlRowsIter<'_> {
+impl<T: MysqlTypeConvertor> Iterator for MysqlRowsIter<'_, T> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -160,7 +166,11 @@ impl Iterator for MysqlRowsIter<'_> {
                 let values = row.unwrap();
                 assert_eq!(values.len(), self.target_format.columns.len());
                 for (column, value) in std::iter::zip(&self.target_format.columns, values) {
-                    match Value::try_from((column, value)) {
+                    match T::mysql_from(value::MysqlFromData {
+                        table: &self.target_format.name,
+                        column,
+                        value,
+                    }) {
                         Ok(val) => result.push(val),
                         Err(e) => return Some(Err(e)),
                     }
@@ -173,7 +183,7 @@ impl Iterator for MysqlRowsIter<'_> {
     }
 }
 
-impl DBReader for MysqlDB {
+impl<T: MysqlTypeConvertor> DBReader for MysqlDB<T> {
     fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
         let query = format!(
             "SELECT {} FROM {}",
@@ -187,22 +197,30 @@ impl DBReader for MysqlDB {
         return Ok(Box::new(MysqlRowsIter {
             target_format,
             rows,
+            type_convetor: std::marker::PhantomData::<T>,
         }));
     }
 }
 
-impl DBWriter for MysqlDB {
+impl<T: MysqlTypeConvertor> DBWriter for MysqlDB<T> {
     fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
-        return MysqlDB::new(&self.uri, self.type_options.clone())
-            .map(|writer| Box::new(writer) as _);
+        let new: MysqlDB<T> = MysqlDB::new(&self.uri, self.type_options.clone())?;
+        return Ok(Box::new(new));
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
         let stmt = self.get_stmt(&table.name, batch[0].len(), batch.len())?;
         let mut values = Vec::with_capacity(batch[0].len() * batch.len());
         for row in batch {
-            for value in row {
-                values.push(mysql::Value::from(value));
+            for (value, column) in std::iter::zip(row, &table.columns) {
+                values.push(
+                    T::mysql_to(MysqlToData {
+                        table: &table.name,
+                        column,
+                        value,
+                    })
+                    .context("Faild to convert data for mysql")?,
+                );
             }
         }
         self.connection
