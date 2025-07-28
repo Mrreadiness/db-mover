@@ -5,23 +5,26 @@ use anyhow::Context;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::{Client, NoTls};
 use tracing::debug;
-use value::PostgreColumn;
+use value::PostgresColumn;
 
-use crate::databases::table::{Row, Value};
+use crate::databases::postgres::value::{PostgresFromData, PostgresToData, PostgresTypeConvertor};
+use crate::databases::table::Row;
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
+use crate::databases::type_convertor::DefaultTypeConvertor;
 
 use super::table::{Column, TableInfo};
 use super::traits::{ReaderIterator, WriterError};
 
-mod value;
+pub mod value;
 
-pub struct PostgresDB {
+pub struct PostgresDB<T: PostgresTypeConvertor = DefaultTypeConvertor> {
     uri: String,
     client: Client,
-    table_columns_cache: HashMap<String, Vec<PostgreColumn>>,
+    table_columns_cache: HashMap<String, Vec<PostgresColumn>>,
+    _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl PostgresDB {
+impl<T: PostgresTypeConvertor> PostgresDB<T> {
     pub fn new(uri: &str) -> anyhow::Result<Self> {
         let client = Self::connect(uri)?;
         debug!("Connected to postgres {uri}");
@@ -29,6 +32,7 @@ impl PostgresDB {
             client,
             uri: uri.to_string(),
             table_columns_cache: HashMap::default(),
+            _type_convetor: std::marker::PhantomData,
         });
     }
 
@@ -46,7 +50,7 @@ impl PostgresDB {
             .context("Failed to convert i64 to u64");
     }
 
-    fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<PostgreColumn>> {
+    fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<PostgresColumn>> {
         let mut columns = Vec::new();
         let rows = self
             .client
@@ -60,7 +64,7 @@ impl PostgresDB {
             .context("Failed to query information about table")?;
         for row in rows {
             let is_nullable: &str = row.get(1);
-            columns.push(PostgreColumn {
+            columns.push(PostgresColumn {
                 name: row.get(0),
                 column_type: postgres::types::Type::UNKNOWN, // Temp default
                 nullable: is_nullable == "YES",
@@ -90,7 +94,7 @@ impl PostgresDB {
         return Ok(columns);
     }
 
-    fn get_columns_cached(&mut self, table: &str) -> anyhow::Result<Vec<PostgreColumn>> {
+    fn get_columns_cached(&mut self, table: &str) -> anyhow::Result<Vec<PostgresColumn>> {
         return match self.table_columns_cache.get(table) {
             Some(columns) => Ok(columns.clone()),
             None => {
@@ -103,7 +107,7 @@ impl PostgresDB {
     }
 }
 
-impl DBInfoProvider for PostgresDB {
+impl<T: PostgresTypeConvertor> DBInfoProvider for PostgresDB<T> {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
@@ -144,12 +148,13 @@ impl DBInfoProvider for PostgresDB {
     }
 }
 
-struct PostgresRowsIter<'a> {
+struct PostgresRowsIter<'a, T: PostgresTypeConvertor> {
     target_format: TableInfo,
     rows: postgres::RowIter<'a>,
+    _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl Iterator for PostgresRowsIter<'_> {
+impl<T: PostgresTypeConvertor> Iterator for PostgresRowsIter<'_, T> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -161,7 +166,12 @@ impl Iterator for PostgresRowsIter<'_> {
             Ok(Some(row)) => {
                 let mut result: Row = Vec::with_capacity(self.target_format.columns.len());
                 for (idx, column) in self.target_format.columns.iter().enumerate() {
-                    match Value::try_from((column.column_type, &row, idx)) {
+                    match T::postgres_from(PostgresFromData {
+                        table: &self.target_format.name,
+                        column,
+                        row: &row,
+                        column_index: idx,
+                    }) {
                         Ok(val) => result.push(val),
                         Err(e) => return Some(Err(e)),
                     }
@@ -174,7 +184,7 @@ impl Iterator for PostgresRowsIter<'_> {
     }
 }
 
-impl DBReader for PostgresDB {
+impl<T: PostgresTypeConvertor> DBReader for PostgresDB<T> {
     fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
         let query = format!(
             "SELECT {} FROM {}",
@@ -192,6 +202,7 @@ impl DBReader for PostgresDB {
         return Ok(Box::new(PostgresRowsIter {
             target_format,
             rows,
+            _type_convetor: std::marker::PhantomData::<T>,
         }));
     }
 }
@@ -199,9 +210,10 @@ impl DBReader for PostgresDB {
 // Binary COPY signature (first 15 bytes)
 const BINARY_SIGNATURE: &[u8] = b"PGCOPY\n\xFF\r\n\0";
 
-impl DBWriter for PostgresDB {
+impl<T: PostgresTypeConvertor> DBWriter for PostgresDB<T> {
     fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
-        return PostgresDB::new(&self.uri).map(|writer| Box::new(writer) as _);
+        let new: PostgresDB<T> = PostgresDB::new(&self.uri)?;
+        return Ok(Box::new(new));
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
@@ -229,7 +241,14 @@ impl DBWriter for PostgresDB {
                 "Number of columns should be equal number of value in a row"
             );
             for (value, column) in std::iter::zip(row, &columns) {
-                value.write_postgres_bytes(&mut writer, column)?;
+                T::postgres_to(
+                    &mut writer,
+                    PostgresToData {
+                        table: &table.name,
+                        value,
+                        column,
+                    },
+                )?;
             }
         }
         writer.write_all(&(-1_i16).to_be_bytes())?;

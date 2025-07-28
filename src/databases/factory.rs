@@ -31,7 +31,7 @@ impl<T: TypeConvetor> DBFactory<T> {
         ));
     }
 
-    fn build_postgres(&self, uri: &str) -> anyhow::Result<Box<PostgresDB>> {
+    fn build_postgres(&self, uri: &str) -> anyhow::Result<Box<PostgresDB<T>>> {
         return Ok(Box::new(
             PostgresDB::new(uri).context("Unable to connect to the postgres")?,
         ));
