@@ -17,13 +17,19 @@ impl Default for MysqlTypeOptions {
     }
 }
 
+pub struct MysqlConstraint {
+    pub name: String,
+    pub constraint_type: String,
+    pub clause: Option<String>,
+}
+
 pub struct MysqlColumnData<'a> {
     pub table: &'a str,
     pub column_name: String,
     pub column_type: String,
     pub nullable: bool,
     pub options: &'a MysqlTypeOptions,
-    pub has_json_constraint: bool,
+    pub table_constraints: &'a [MysqlConstraint],
 }
 
 pub struct MysqlFromData<'a> {
@@ -56,7 +62,12 @@ pub trait MysqlTypeConvertor: Send + 'static {
         if data.options.tinyint_as_bool && formated == "tinyint(1)" {
             return Ok(ColumnType::Bool);
         }
-        if data.has_json_constraint {
+        let json_constraint = Some(format!("json_valid(`{}`)", data.column_name));
+        if data
+            .table_constraints
+            .iter()
+            .any(|constraint| constraint.clause == json_constraint)
+        {
             return Ok(ColumnType::Json);
         }
         if formated.starts_with("char") || formated.starts_with("varchar") {

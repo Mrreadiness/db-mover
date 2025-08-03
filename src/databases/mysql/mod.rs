@@ -7,7 +7,9 @@ use mysql::{Conn, Opts, params};
 use tracing::debug;
 pub use value::MysqlTypeOptions;
 
-use crate::databases::mysql::value::{MysqlColumnData, MysqlToData, MysqlTypeConvertor};
+use crate::databases::mysql::value::{
+    MysqlColumnData, MysqlConstraint, MysqlToData, MysqlTypeConvertor,
+};
 use crate::databases::table::Row;
 use crate::databases::traits::{DBInfoProvider, DBReader};
 use crate::databases::type_convertor::DefaultTypeConvertor;
@@ -20,7 +22,6 @@ pub mod value;
 pub struct MysqlDB<T: MysqlTypeConvertor = DefaultTypeConvertor> {
     uri: String,
     connection: Conn,
-    is_mariadb: bool,
     type_options: MysqlTypeOptions,
     stmt_cache: HashMap<(String, usize, usize), mysql::Statement>,
     _type_convetor: std::marker::PhantomData<T>,
@@ -28,16 +29,11 @@ pub struct MysqlDB<T: MysqlTypeConvertor = DefaultTypeConvertor> {
 
 impl<T: MysqlTypeConvertor> MysqlDB<T> {
     pub fn new(uri: &str, type_options: MysqlTypeOptions) -> anyhow::Result<Self> {
-        let mut connection = Self::connect(uri)?;
+        let connection = Self::connect(uri)?;
         debug!("Connected to mysql {uri}");
-        let version: String = connection
-            .query_first("SELECT VERSION()")
-            .context("Unable to fetch database version")?
-            .unwrap();
         return Ok(Self {
             uri: uri.to_string(),
             connection,
-            is_mariadb: version.contains("MariaDB"),
             type_options,
             stmt_cache: HashMap::new(),
             _type_convetor: std::marker::PhantomData,
@@ -80,6 +76,47 @@ impl<T: MysqlTypeConvertor> MysqlDB<T> {
             }
         };
     }
+
+    fn get_table_constraints(&mut self, table: &str) -> anyhow::Result<Vec<MysqlConstraint>> {
+        return self
+            .connection
+            .exec(
+                r"SELECT
+                    tc.CONSTRAINT_NAME,
+                    tc.CONSTRAINT_TYPE,
+                    cc.CHECK_CLAUSE
+                  FROM
+                    INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                  LEFT JOIN
+                    INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+                    ON cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+                    AND cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+                  WHERE tc.CONSTRAINT_SCHEMA = database() and tc.TABLE_NAME = :table",
+                params! {table},
+            )?
+            .into_iter()
+            .map(|row: mysql::Row| {
+                let name: String = row
+                    .get_opt(0)
+                    .context("Value expected")?
+                    .context("Couldn't parse constraint name")?;
+                let constraint_type: String = row
+                    .get_opt(1)
+                    .context("Value expected")?
+                    .context("Couldn't parse constraint type")?;
+                let clause: Option<String> = row
+                    .get_opt(2)
+                    .context("Value expected")?
+                    .context("Couldn't parse constraint clause")?;
+                Ok(MysqlConstraint {
+                    name,
+                    constraint_type,
+                    clause,
+                })
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .context("Failed to get infomration about table constraints");
+    }
 }
 
 impl<T: MysqlTypeConvertor> DBInfoProvider for MysqlDB<T> {
@@ -96,6 +133,7 @@ impl<T: MysqlTypeConvertor> DBInfoProvider for MysqlDB<T> {
                                                                 FROM INFORMATION_SCHEMA.COLUMNS 
                                                                 WHERE table_name = :table AND TABLE_SCHEMA = database()
                                                                 ORDER BY ORDINAL_POSITION", params! {table})?;
+        let constraints = self.get_table_constraints(table)?;
         let mut columns = Vec::with_capacity(info_rows.len());
         for row in info_rows {
             let column_name = row
@@ -110,22 +148,13 @@ impl<T: MysqlTypeConvertor> DBInfoProvider for MysqlDB<T> {
                 .get_opt(2)
                 .context("Value expected")?
                 .context("Couldn't parse column nullable")?;
-            let mut has_json_constraint = false;
-            if column_type == "longtext" && self.is_mariadb {
-                let num_json_constraints: usize = self.connection.exec_first(
-                    r"SELECT count(1) FROM INFORMATION_SCHEMA.check_constraints
-                    WHERE CONSTRAINT_SCHEMA = database() AND TABLE_NAME = :table AND CHECK_CLAUSE = :clause",
-                    params! {table, "clause" => format!("json_valid(`{column_name}`)")},
-                ).context("Failed to check json constraint")?.unwrap();
-                has_json_constraint = num_json_constraints > 0;
-            }
             columns.push(T::mysql_column(MysqlColumnData {
                 table,
                 column_name,
                 column_type,
                 nullable: nullable.as_str() == "YES",
-                has_json_constraint,
                 options: &self.type_options,
+                table_constraints: &constraints,
             })?);
         }
 
