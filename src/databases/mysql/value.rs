@@ -17,17 +17,47 @@ impl Default for MysqlTypeOptions {
     }
 }
 
-impl ColumnType {
-    pub fn try_from_mysql_type(
-        type_name: &str,
-        options: &MysqlTypeOptions,
-    ) -> anyhow::Result<ColumnType> {
-        let formated = type_name.trim().to_lowercase();
-        if options.binary_16_as_uuid && formated == "binary(16)" {
+pub struct MysqlColumnData<'a> {
+    pub table: &'a str,
+    pub column_name: String,
+    pub column_type: String,
+    pub nullable: bool,
+    pub options: &'a MysqlTypeOptions,
+    pub has_json_constraint: bool,
+}
+
+pub struct MysqlFromData<'a> {
+    pub table: &'a str,
+    pub column: &'a Column,
+    pub value: mysql::Value,
+}
+
+pub struct MysqlToData<'a> {
+    pub table: &'a str,
+    pub column: &'a Column,
+    pub value: &'a Value,
+}
+
+pub trait MysqlTypeConvertor: Send + 'static {
+    fn mysql_column(data: MysqlColumnData) -> anyhow::Result<Column> {
+        let column_type = Self::mysql_column_type(&data)?;
+        return Ok(Column {
+            name: data.column_name,
+            column_type,
+            nullable: data.nullable,
+        });
+    }
+
+    fn mysql_column_type(data: &MysqlColumnData) -> anyhow::Result<ColumnType> {
+        let formated = data.column_type.trim().to_lowercase();
+        if data.options.binary_16_as_uuid && formated == "binary(16)" {
             return Ok(ColumnType::Uuid);
         }
-        if options.tinyint_as_bool && formated == "tinyint(1)" {
+        if data.options.tinyint_as_bool && formated == "tinyint(1)" {
             return Ok(ColumnType::Bool);
+        }
+        if data.has_json_constraint {
+            return Ok(ColumnType::Json);
         }
         if formated.starts_with("char") || formated.starts_with("varchar") {
             return Ok(ColumnType::String);
@@ -58,24 +88,10 @@ impl ColumnType {
             "date" => Ok(ColumnType::Date),
             "time" => Ok(ColumnType::Time),
             "json" => Ok(ColumnType::Json),
-            _ => Err(anyhow::anyhow!("Unknown column type {type_name}")),
+            _ => Err(anyhow::anyhow!("Unknown column type {}", data.column_type)),
         };
     }
-}
 
-pub struct MysqlFromData<'a> {
-    pub table: &'a str,
-    pub column: &'a Column,
-    pub value: mysql::Value,
-}
-
-pub struct MysqlToData<'a> {
-    pub table: &'a str,
-    pub column: &'a Column,
-    pub value: &'a Value,
-}
-
-pub trait MysqlTypeConvertor: Send + 'static {
     fn mysql_from(data: MysqlFromData) -> anyhow::Result<Value> {
         if data.value == mysql::Value::NULL {
             return Ok(Value::Null);

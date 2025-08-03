@@ -7,12 +7,12 @@ use mysql::{Conn, Opts, params};
 use tracing::debug;
 pub use value::MysqlTypeOptions;
 
-use crate::databases::mysql::value::{MysqlToData, MysqlTypeConvertor};
+use crate::databases::mysql::value::{MysqlColumnData, MysqlToData, MysqlTypeConvertor};
 use crate::databases::table::Row;
 use crate::databases::traits::{DBInfoProvider, DBReader};
 use crate::databases::type_convertor::DefaultTypeConvertor;
 
-use super::table::{Column, ColumnType, TableInfo};
+use super::table::TableInfo;
 use super::traits::{DBWriter, ReaderIterator, WriterError};
 
 pub mod value;
@@ -98,11 +98,11 @@ impl<T: MysqlTypeConvertor> DBInfoProvider for MysqlDB<T> {
                                                                 ORDER BY ORDINAL_POSITION", params! {table})?;
         let mut columns = Vec::with_capacity(info_rows.len());
         for row in info_rows {
-            let name = row
+            let column_name = row
                 .get_opt(0)
                 .context("Value expected")?
                 .context("Couldn't parse column name")?;
-            let mut column_type: String = row
+            let column_type: String = row
                 .get_opt(1)
                 .context("Value expected")?
                 .context("Couldn't parse column type")?;
@@ -110,21 +110,23 @@ impl<T: MysqlTypeConvertor> DBInfoProvider for MysqlDB<T> {
                 .get_opt(2)
                 .context("Value expected")?
                 .context("Couldn't parse column nullable")?;
+            let mut has_json_constraint = false;
             if column_type == "longtext" && self.is_mariadb {
                 let num_json_constraints: usize = self.connection.exec_first(
                     r"SELECT count(1) FROM INFORMATION_SCHEMA.check_constraints
                     WHERE CONSTRAINT_SCHEMA = database() AND TABLE_NAME = :table AND CHECK_CLAUSE = :clause",
-                    params! {table, "clause" => format!("json_valid(`{name}`)")},
+                    params! {table, "clause" => format!("json_valid(`{column_name}`)")},
                 ).context("Failed to check json constraint")?.unwrap();
-                if num_json_constraints > 0 {
-                    column_type = String::from("json");
-                }
+                has_json_constraint = num_json_constraints > 0;
             }
-            columns.push(Column {
-                name,
-                column_type: ColumnType::try_from_mysql_type(&column_type, &self.type_options)?,
+            columns.push(T::mysql_column(MysqlColumnData {
+                table,
+                column_name,
+                column_type,
                 nullable: nullable.as_str() == "YES",
-            });
+                has_json_constraint,
+                options: &self.type_options,
+            })?);
         }
 
         return Ok(TableInfo {

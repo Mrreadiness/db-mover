@@ -1,11 +1,9 @@
-use std::str::FromStr;
-
 use anyhow::Context;
 use rusqlite::{Connection, OpenFlags, params_from_iter};
 use tracing::debug;
 
 use crate::databases::{
-    sqlite::value::{SqliteFromData, SqliteToData, SqliteTypeConvertor},
+    sqlite::value::{SqliteColumnData, SqliteFromData, SqliteToData, SqliteTypeConvertor},
     table::Row,
     traits::{DBInfoProvider, DBReader, DBWriter},
     type_convertor::DefaultTypeConvertor,
@@ -46,14 +44,15 @@ impl<T: SqliteTypeConvertor> SqliteDB<T> {
         let mut rows = stmt.query([table])?;
         let mut result = Vec::new();
         while let Ok(Some(row)) = rows.next() {
-            result.push(Column {
-                name: row.get(0)?,
-                column_type: {
-                    let type_name: String = row.get(1)?;
-                    super::table::ColumnType::from_str(&type_name)?
-                },
-                nullable: !row.get(2)?,
-            });
+            result.push(
+                T::sqlite_column(SqliteColumnData {
+                    table,
+                    column_name: row.get(0)?,
+                    column_type: row.get(1)?,
+                    nullable: !row.get(2)?,
+                })
+                .context("Failed to collect data about sqlite column")?,
+            );
         }
         return Ok(result);
     }

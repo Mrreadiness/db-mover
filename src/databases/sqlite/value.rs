@@ -4,6 +4,13 @@ use rusqlite::{
     types::{FromSql, ToSqlOutput, ValueRef},
 };
 
+pub struct SqliteColumnData<'a> {
+    pub table: &'a str,
+    pub column_name: String,
+    pub column_type: String,
+    pub nullable: bool,
+}
+
 pub struct SqliteFromData<'a> {
     pub table: &'a str,
     pub column: &'a Column,
@@ -17,6 +24,46 @@ pub struct SqliteToData<'a> {
 }
 
 pub trait SqliteTypeConvertor: Send + 'static {
+    fn sqlite_column(data: SqliteColumnData) -> anyhow::Result<Column> {
+        let column_type = Self::sqlite_column_type(&data)?;
+        return Ok(Column {
+            name: data.column_name,
+            column_type,
+            nullable: data.nullable,
+        });
+    }
+
+    fn sqlite_column_type(data: &SqliteColumnData) -> anyhow::Result<ColumnType> {
+        let type_formated = data.column_type.trim().to_lowercase();
+        if type_formated.starts_with("varchar")
+            || type_formated.starts_with("nvarchar")
+            || type_formated.starts_with("nchar")
+            || type_formated.starts_with("char")
+        {
+            return Ok(ColumnType::String);
+        }
+        let column_type = match type_formated.as_str() {
+            "tinyint" | "smallint" | "smallserial" => ColumnType::I16,
+            "integer" | "serial" | "int" => ColumnType::I32,
+            "bigint" | "bigserial" => ColumnType::I64,
+            "float" | "real" => ColumnType::F32,
+            "double" | "double precision" => ColumnType::F64,
+            "bool" | "boolean" => ColumnType::Bool,
+            "character" | "varchar" | "nvarchar" | "char" | "nchar" | "clob" | "text"
+            | "bpchar" => ColumnType::String,
+
+            "blob" | "bytea" => ColumnType::Bytes,
+            "timestamptz" => ColumnType::Timestamptz,
+            "datetime" | "timestamp" => ColumnType::Timestamp,
+            "date" => ColumnType::Date,
+            "time" => ColumnType::Time,
+            "json" | "jsonb" => ColumnType::Json,
+            "uuid" => ColumnType::Uuid,
+            _ => return Err(anyhow::anyhow!("Unknown column type {}", data.column_type)),
+        };
+        return Ok(column_type);
+    }
+
     fn sqlite_from(data: SqliteFromData) -> anyhow::Result<Value> {
         if data.value == ValueRef::Null {
             return Ok(Value::Null);

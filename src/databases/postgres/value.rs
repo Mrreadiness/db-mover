@@ -13,11 +13,44 @@ use crate::databases::{
     traits::WriterError,
 };
 
-impl TryFrom<Type> for ColumnType {
-    type Error = anyhow::Error;
+#[derive(Clone, Debug, PartialEq)]
+pub struct PostgresColumnData {
+    pub table: String,
+    pub column_name: String,
+    pub column_type: postgres::types::Type,
+    pub nullable: bool,
+}
 
-    fn try_from(value: Type) -> Result<Self, Self::Error> {
-        let column_type = match value {
+pub struct PostgresFromData<'a> {
+    pub table: &'a str,
+    pub column: &'a Column,
+    pub row: &'a postgres::Row,
+    pub column_index: usize,
+}
+
+pub struct PostgresToData<'a> {
+    pub table: &'a str,
+    pub value: &'a Value,
+    pub column: &'a Column,
+    pub actual_column_type: postgres::types::Type,
+}
+
+pub const POSTGRES_EPOCH: NaiveDateTime = NaiveDate::from_ymd_opt(2000, 1, 1)
+    .unwrap()
+    .and_hms_opt(0, 0, 0)
+    .unwrap();
+
+pub trait PostgresTypeConvertor: Send + 'static {
+    fn postgres_column(data: &PostgresColumnData) -> anyhow::Result<Column> {
+        return Ok(Column {
+            name: data.column_name.clone(),
+            column_type: Self::postgres_column_type(data)?,
+            nullable: data.nullable,
+        });
+    }
+
+    fn postgres_column_type(data: &PostgresColumnData) -> anyhow::Result<ColumnType> {
+        let column_type = match data.column_type {
             Type::INT8 => ColumnType::I64,
             Type::INT4 => ColumnType::I32,
             Type::INT2 => ColumnType::I16,
@@ -33,50 +66,16 @@ impl TryFrom<Type> for ColumnType {
             Type::TIME => ColumnType::Time,
             Type::JSON | Type::JSON_ARRAY | Type::JSONB | Type::JSONB_ARRAY => ColumnType::Json,
             Type::UUID => ColumnType::Uuid,
-            _ => return Err(anyhow::anyhow!("Unsupported postgres type {value}")),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Unsupported postgres type {}",
+                    data.column_type
+                ));
+            }
         };
         return Ok(column_type);
     }
-}
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct PostgresColumn {
-    pub name: String,
-    pub column_type: postgres::types::Type,
-    pub nullable: bool,
-}
-
-impl TryFrom<PostgresColumn> for Column {
-    type Error = anyhow::Error;
-
-    fn try_from(value: PostgresColumn) -> Result<Self, Self::Error> {
-        return Ok(Column {
-            name: value.name,
-            column_type: value.column_type.try_into()?,
-            nullable: value.nullable,
-        });
-    }
-}
-
-pub struct PostgresFromData<'a> {
-    pub table: &'a str,
-    pub column: &'a Column,
-    pub row: &'a postgres::Row,
-    pub column_index: usize,
-}
-
-pub struct PostgresToData<'a> {
-    pub table: &'a str,
-    pub value: &'a Value,
-    pub column: &'a PostgresColumn, // TODO: Column vs PostgresColumn stabilize
-}
-
-pub const POSTGRES_EPOCH: NaiveDateTime = NaiveDate::from_ymd_opt(2000, 1, 1)
-    .unwrap()
-    .and_hms_opt(0, 0, 0)
-    .unwrap();
-
-pub trait PostgresTypeConvertor: Send + 'static {
     fn postgres_from(data: PostgresFromData) -> anyhow::Result<Value> {
         let row = data.row;
         let idx = data.column_index;
@@ -222,8 +221,8 @@ pub trait PostgresTypeConvertor: Send + 'static {
             Value::Json(value) => {
                 let bytes =
                     serde_json::to_vec(value).context("Failed to serialize json into bytes")?;
-                if data.column.column_type == Type::JSONB
-                    || data.column.column_type == Type::JSONB_ARRAY
+                if data.actual_column_type == Type::JSONB
+                    || data.actual_column_type == Type::JSONB_ARRAY
                 {
                     let jsonb_version = 1_u8;
                     let len = (bytes.len() + size_of_val(&jsonb_version)) as i32;

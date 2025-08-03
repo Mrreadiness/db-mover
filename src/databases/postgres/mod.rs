@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use std::io::Write;
 
 use anyhow::Context;
+use itertools::izip;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::{Client, NoTls};
 use tracing::debug;
-use value::PostgresColumn;
+use value::PostgresColumnData;
 
 use crate::databases::postgres::value::{PostgresFromData, PostgresToData, PostgresTypeConvertor};
 use crate::databases::table::Row;
@@ -20,7 +21,7 @@ pub mod value;
 pub struct PostgresDB<T: PostgresTypeConvertor = DefaultTypeConvertor> {
     uri: String,
     client: Client,
-    table_columns_cache: HashMap<String, Vec<PostgresColumn>>,
+    table_columns_cache: HashMap<String, Vec<PostgresColumnData>>,
     _type_convetor: std::marker::PhantomData<T>,
 }
 
@@ -50,7 +51,7 @@ impl<T: PostgresTypeConvertor> PostgresDB<T> {
             .context("Failed to convert i64 to u64");
     }
 
-    fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<PostgresColumn>> {
+    fn get_columns(&mut self, table: &str) -> anyhow::Result<Vec<PostgresColumnData>> {
         let mut columns = Vec::new();
         let rows = self
             .client
@@ -64,13 +65,14 @@ impl<T: PostgresTypeConvertor> PostgresDB<T> {
             .context("Failed to query information about table")?;
         for row in rows {
             let is_nullable: &str = row.get(1);
-            columns.push(PostgresColumn {
-                name: row.get(0),
+            columns.push(PostgresColumnData {
+                table: table.to_string(),
+                column_name: row.get(0),
                 column_type: postgres::types::Type::UNKNOWN, // Temp default
                 nullable: is_nullable == "YES",
             })
         }
-        let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+        let column_names: Vec<&str> = columns.iter().map(|c| c.column_name.as_str()).collect();
         let query = format!("SELECT {} FROM {}", column_names.join(", "), table);
         let stmt = self
             .client
@@ -84,9 +86,9 @@ impl<T: PostgresTypeConvertor> PostgresDB<T> {
         );
         for (column, column_info) in std::iter::zip(columns.iter_mut(), stmt.columns()) {
             assert!(
-                column.name == column_info.name(),
+                column.column_name == column_info.name(),
                 "Broken invariant. Expected to get {} column, got {}",
-                column.name,
+                column.column_name,
                 column_info.name()
             );
             column.column_type = column_info.type_().clone();
@@ -94,16 +96,12 @@ impl<T: PostgresTypeConvertor> PostgresDB<T> {
         return Ok(columns);
     }
 
-    fn get_columns_cached(&mut self, table: &str) -> anyhow::Result<Vec<PostgresColumn>> {
-        return match self.table_columns_cache.get(table) {
-            Some(columns) => Ok(columns.clone()),
-            None => {
-                let columns = self.get_columns(table)?;
-                self.table_columns_cache
-                    .insert(table.to_string(), columns.clone());
-                Ok(columns)
-            }
-        };
+    fn get_columns_cached(&mut self, table: &str) -> anyhow::Result<&Vec<PostgresColumnData>> {
+        if !self.table_columns_cache.contains_key(table) {
+            let columns = self.get_columns(table)?;
+            self.table_columns_cache.insert(table.to_string(), columns);
+        }
+        return Ok(self.table_columns_cache.get(table).expect("Can't be empty"));
     }
 }
 
@@ -120,9 +118,10 @@ impl<T: PostgresTypeConvertor> DBInfoProvider for PostgresDB<T> {
             .get_columns_cached(table)
             .context("Failed to get info about table columns")?;
         let columns = postgres_columns
-            .into_iter()
-            .map(Column::try_from)
-            .collect::<anyhow::Result<Vec<Column>>>()?;
+            .iter()
+            .map(T::postgres_column)
+            .collect::<anyhow::Result<Vec<Column>>>()
+            .context("Failed to parse info about table columns")?;
         return Ok(TableInfo {
             name: table.to_string(),
             num_rows,
@@ -217,7 +216,18 @@ impl<T: PostgresTypeConvertor> DBWriter for PostgresDB<T> {
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
-        let columns = self.get_columns_cached(&table.name)?;
+        let postgres_columns = self
+            .get_columns_cached(&table.name)
+            .context("Failed to get info about table columns")?;
+        let columns = postgres_columns
+            .iter()
+            .map(T::postgres_column)
+            .collect::<anyhow::Result<Vec<Column>>>()
+            .context("Failed to parse info about table columns")?;
+        let actual_column_types = postgres_columns
+            .iter()
+            .map(|c| c.column_type.clone())
+            .collect::<Vec<postgres::types::Type>>();
         let query = format!("COPY {} FROM STDIN WITH BINARY", table.name);
         let mut writer = self
             .client
@@ -233,20 +243,21 @@ impl<T: PostgresTypeConvertor> DBWriter for PostgresDB<T> {
         writer.write_all(&0_i32.to_be_bytes())?;
 
         for row in batch {
-            // Count of fields
+            // Number of fields
             writer.write_all(&(row.len() as i16).to_be_bytes())?;
             assert_eq!(
                 columns.len(),
                 row.len(),
                 "Number of columns should be equal number of value in a row"
             );
-            for (value, column) in std::iter::zip(row, &columns) {
+            for (value, column, actual_column_type) in izip!(row, &columns, &actual_column_types) {
                 T::postgres_to(
                     &mut writer,
                     PostgresToData {
                         table: &table.name,
                         value,
                         column,
+                        actual_column_type: actual_column_type.clone(),
                     },
                 )?;
             }

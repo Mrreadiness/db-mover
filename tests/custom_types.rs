@@ -59,7 +59,7 @@ impl PostgresTypeConvertor for CustomTypeConvertor {
         writer: &mut postgres::CopyInWriter<'_>,
         data: db_mover::databases::postgres::value::PostgresToData,
     ) -> Result<(), db_mover::databases::traits::WriterError> {
-        if ColumnType::try_from(data.column.column_type.clone()).unwrap() == ColumnType::F32 {
+        if data.column.column_type == ColumnType::F32 {
             writer.write_all(&(size_of_val(&CUSTOM_F32_OVERRIDE) as i32).to_be_bytes())?;
             writer.write_all(&CUSTOM_F32_OVERRIDE.to_be_bytes())?;
             return Ok(());
