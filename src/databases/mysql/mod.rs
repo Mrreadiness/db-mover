@@ -8,18 +8,18 @@ use tracing::debug;
 pub use value::MysqlTypeOptions;
 
 use crate::databases::mysql::value::{
-    MysqlColumnData, MysqlConstraint, MysqlToData, MysqlTypeConvertor,
+    MysqlColumnData, MysqlConstraint, MysqlToData, MysqlTypeConverter,
 };
 use crate::databases::table::Row;
 use crate::databases::traits::{DBInfoProvider, DBReader};
-use crate::databases::type_convertor::DefaultTypeConvertor;
+use crate::databases::type_converter::DefaultTypeConverter;
 
 use super::table::TableInfo;
 use super::traits::{DBWriter, ReaderIterator, WriterError};
 
 pub mod value;
 
-pub struct MysqlDB<T: MysqlTypeConvertor = DefaultTypeConvertor> {
+pub struct MysqlDB<T: MysqlTypeConverter = DefaultTypeConverter> {
     uri: String,
     connection: Conn,
     type_options: MysqlTypeOptions,
@@ -27,7 +27,7 @@ pub struct MysqlDB<T: MysqlTypeConvertor = DefaultTypeConvertor> {
     _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl<T: MysqlTypeConvertor> MysqlDB<T> {
+impl<T: MysqlTypeConverter> MysqlDB<T> {
     pub fn new(uri: &str, type_options: MysqlTypeOptions) -> anyhow::Result<Self> {
         let connection = Self::connect(uri)?;
         debug!("Connected to mysql {uri}");
@@ -119,7 +119,7 @@ impl<T: MysqlTypeConvertor> MysqlDB<T> {
     }
 }
 
-impl<T: MysqlTypeConvertor> DBInfoProvider for MysqlDB<T> {
+impl<T: MysqlTypeConverter> DBInfoProvider for MysqlDB<T> {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
@@ -180,14 +180,14 @@ impl<T: MysqlTypeConvertor> DBInfoProvider for MysqlDB<T> {
     }
 }
 
-struct MysqlRowsIter<'a, T: MysqlTypeConvertor> {
+struct MysqlRowsIter<'a, T: MysqlTypeConverter> {
     target_format: TableInfo,
     rows: mysql::QueryResult<'a, 'a, 'a, mysql::Text>,
 
     type_convetor: std::marker::PhantomData<T>,
 }
 
-impl<T: MysqlTypeConvertor> Iterator for MysqlRowsIter<'_, T> {
+impl<T: MysqlTypeConverter> Iterator for MysqlRowsIter<'_, T> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -214,7 +214,7 @@ impl<T: MysqlTypeConvertor> Iterator for MysqlRowsIter<'_, T> {
     }
 }
 
-impl<T: MysqlTypeConvertor> DBReader for MysqlDB<T> {
+impl<T: MysqlTypeConverter> DBReader for MysqlDB<T> {
     fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
         let query = format!(
             "SELECT {} FROM {}",
@@ -233,7 +233,7 @@ impl<T: MysqlTypeConvertor> DBReader for MysqlDB<T> {
     }
 }
 
-impl<T: MysqlTypeConvertor> DBWriter for MysqlDB<T> {
+impl<T: MysqlTypeConverter> DBWriter for MysqlDB<T> {
     fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
         let new: MysqlDB<T> = MysqlDB::new(&self.uri, self.type_options.clone())?;
         return Ok(Box::new(new));

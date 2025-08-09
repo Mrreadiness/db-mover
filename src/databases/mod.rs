@@ -4,4 +4,4 @@ pub mod postgres;
 pub mod sqlite;
 pub mod table;
 pub mod traits;
-pub mod type_convertor;
+pub mod type_converter;

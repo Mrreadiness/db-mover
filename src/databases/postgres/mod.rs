@@ -8,24 +8,24 @@ use postgres::{Client, NoTls};
 use tracing::debug;
 use value::PostgresColumnData;
 
-use crate::databases::postgres::value::{PostgresFromData, PostgresToData, PostgresTypeConvertor};
+use crate::databases::postgres::value::{PostgresFromData, PostgresToData, PostgresTypeConverter};
 use crate::databases::table::Row;
 use crate::databases::traits::{DBInfoProvider, DBReader, DBWriter};
-use crate::databases::type_convertor::DefaultTypeConvertor;
+use crate::databases::type_converter::DefaultTypeConverter;
 
 use super::table::{Column, TableInfo};
 use super::traits::{ReaderIterator, WriterError};
 
 pub mod value;
 
-pub struct PostgresDB<T: PostgresTypeConvertor = DefaultTypeConvertor> {
+pub struct PostgresDB<T: PostgresTypeConverter = DefaultTypeConverter> {
     uri: String,
     client: Client,
     table_columns_cache: HashMap<String, Vec<PostgresColumnData>>,
     _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl<T: PostgresTypeConvertor> PostgresDB<T> {
+impl<T: PostgresTypeConverter> PostgresDB<T> {
     pub fn new(uri: &str) -> anyhow::Result<Self> {
         let client = Self::connect(uri)?;
         debug!("Connected to postgres {uri}");
@@ -105,7 +105,7 @@ impl<T: PostgresTypeConvertor> PostgresDB<T> {
     }
 }
 
-impl<T: PostgresTypeConvertor> DBInfoProvider for PostgresDB<T> {
+impl<T: PostgresTypeConverter> DBInfoProvider for PostgresDB<T> {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
@@ -147,13 +147,13 @@ impl<T: PostgresTypeConvertor> DBInfoProvider for PostgresDB<T> {
     }
 }
 
-struct PostgresRowsIter<'a, T: PostgresTypeConvertor> {
+struct PostgresRowsIter<'a, T: PostgresTypeConverter> {
     target_format: TableInfo,
     rows: postgres::RowIter<'a>,
     _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl<T: PostgresTypeConvertor> Iterator for PostgresRowsIter<'_, T> {
+impl<T: PostgresTypeConverter> Iterator for PostgresRowsIter<'_, T> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -183,7 +183,7 @@ impl<T: PostgresTypeConvertor> Iterator for PostgresRowsIter<'_, T> {
     }
 }
 
-impl<T: PostgresTypeConvertor> DBReader for PostgresDB<T> {
+impl<T: PostgresTypeConverter> DBReader for PostgresDB<T> {
     fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
         let query = format!(
             "SELECT {} FROM {}",
@@ -209,7 +209,7 @@ impl<T: PostgresTypeConvertor> DBReader for PostgresDB<T> {
 // Binary COPY signature (first 15 bytes)
 const BINARY_SIGNATURE: &[u8] = b"PGCOPY\n\xFF\r\n\0";
 
-impl<T: PostgresTypeConvertor> DBWriter for PostgresDB<T> {
+impl<T: PostgresTypeConverter> DBWriter for PostgresDB<T> {
     fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
         let new: PostgresDB<T> = PostgresDB::new(&self.uri)?;
         return Ok(Box::new(new));

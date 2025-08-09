@@ -1,11 +1,11 @@
 mod common;
 use anyhow::Context;
 use db_mover::databases::{
-    mysql::value::MysqlTypeConvertor,
-    postgres::value::PostgresTypeConvertor,
-    sqlite::value::SqliteTypeConvertor,
+    mysql::value::MysqlTypeConverter,
+    postgres::value::PostgresTypeConverter,
+    sqlite::value::SqliteTypeConverter,
     table::{ColumnType, Value},
-    type_convertor::{DefaultTypeConvertor, TypeConvetor},
+    type_converter::{DefaultTypeConverter, TypeConveter},
 };
 use std::io::Write;
 
@@ -19,19 +19,19 @@ use rstest::rstest;
 use rstest_reuse::{self, *};
 use rusqlite::ToSql;
 
-struct CustomTypeConvertor;
+struct CustomTypeConverter;
 
-static CUSTOM_STRING_OVERRIDE: &str = "CustomTypeConvertor override";
+static CUSTOM_STRING_OVERRIDE: &str = "CustomTypeConverter override";
 static CUSTOM_F32_OVERRIDE: f32 = -1.1;
 
-impl SqliteTypeConvertor for CustomTypeConvertor {
+impl SqliteTypeConverter for CustomTypeConverter {
     fn sqlite_from(
         data: db_mover::databases::sqlite::value::SqliteFromData,
     ) -> anyhow::Result<db_mover::databases::table::Value> {
         if data.column.column_type == ColumnType::String {
             return Ok(Value::String(CUSTOM_STRING_OVERRIDE.to_string()));
         }
-        return DefaultTypeConvertor::sqlite_from(data);
+        return DefaultTypeConverter::sqlite_from(data);
     }
 
     fn sqlite_to(
@@ -40,19 +40,19 @@ impl SqliteTypeConvertor for CustomTypeConvertor {
         if data.column.column_type == ColumnType::F32 {
             return CUSTOM_F32_OVERRIDE
                 .to_sql()
-                .context("Failed to convert F32 for CustomTypeConvertor");
+                .context("Failed to convert F32 for CustomTypeConverter");
         }
-        return DefaultTypeConvertor::sqlite_to(data);
+        return DefaultTypeConverter::sqlite_to(data);
     }
 }
-impl PostgresTypeConvertor for CustomTypeConvertor {
+impl PostgresTypeConverter for CustomTypeConverter {
     fn postgres_from(
         data: db_mover::databases::postgres::value::PostgresFromData,
     ) -> anyhow::Result<Value> {
         if data.column.column_type == ColumnType::String {
             return Ok(Value::String(CUSTOM_STRING_OVERRIDE.to_string()));
         }
-        return DefaultTypeConvertor::postgres_from(data);
+        return DefaultTypeConverter::postgres_from(data);
     }
 
     fn postgres_to(
@@ -64,15 +64,15 @@ impl PostgresTypeConvertor for CustomTypeConvertor {
             writer.write_all(&CUSTOM_F32_OVERRIDE.to_be_bytes())?;
             return Ok(());
         }
-        return DefaultTypeConvertor::postgres_to(writer, data);
+        return DefaultTypeConverter::postgres_to(writer, data);
     }
 }
-impl MysqlTypeConvertor for CustomTypeConvertor {
+impl MysqlTypeConverter for CustomTypeConverter {
     fn mysql_from(data: db_mover::databases::mysql::value::MysqlFromData) -> anyhow::Result<Value> {
         if data.column.column_type == ColumnType::String {
             return Ok(Value::String(CUSTOM_STRING_OVERRIDE.to_string()));
         }
-        return DefaultTypeConvertor::mysql_from(data);
+        return DefaultTypeConverter::mysql_from(data);
     }
     fn mysql_to(
         data: db_mover::databases::mysql::value::MysqlToData<'_>,
@@ -80,14 +80,14 @@ impl MysqlTypeConvertor for CustomTypeConvertor {
         if data.column.column_type == ColumnType::F32 {
             return Ok(mysql::Value::Float(CUSTOM_F32_OVERRIDE));
         }
-        return DefaultTypeConvertor::mysql_to(data);
+        return DefaultTypeConverter::mysql_to(data);
     }
 }
 
-impl TypeConvetor for CustomTypeConvertor {}
+impl TypeConveter for CustomTypeConverter {}
 
 #[apply(all_databases_combinations)]
-fn custom_type_convertor_from(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+fn custom_type_converter_from(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     in_db.create_test_table("test");
     out_db.create_test_table("test");
     in_db.fill_test_table("test", 10);
@@ -95,7 +95,7 @@ fn custom_type_convertor_from(mut in_db: impl TestableDatabase, mut out_db: impl
 
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
-    db_mover::run_with::<CustomTypeConvertor>(args).unwrap();
+    db_mover::run_with::<CustomTypeConverter>(args).unwrap();
 
     for row in out_db.get_all_rows("test") {
         assert_eq!(row.text.as_str(), CUSTOM_STRING_OVERRIDE);
@@ -103,7 +103,7 @@ fn custom_type_convertor_from(mut in_db: impl TestableDatabase, mut out_db: impl
 }
 
 #[apply(all_databases_combinations)]
-fn custom_type_convertor_to(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+fn custom_type_converter_to(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
     in_db.create_test_table("test");
     out_db.create_test_table("test");
     in_db.fill_test_table("test", 10);
@@ -111,7 +111,7 @@ fn custom_type_convertor_to(mut in_db: impl TestableDatabase, mut out_db: impl T
 
     let mut args = db_mover::args::Args::new(in_db.get_uri(), out_db.get_uri());
     args.table.push("test".to_string());
-    db_mover::run_with::<CustomTypeConvertor>(args).unwrap();
+    db_mover::run_with::<CustomTypeConverter>(args).unwrap();
 
     for row in out_db.get_all_rows("test") {
         assert_eq!(row.real, CUSTOM_F32_OVERRIDE);

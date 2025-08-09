@@ -40,7 +40,7 @@ pub const POSTGRES_EPOCH: NaiveDateTime = NaiveDate::from_ymd_opt(2000, 1, 1)
     .and_hms_opt(0, 0, 0)
     .unwrap();
 
-pub trait PostgresTypeConvertor: Send + 'static {
+pub trait PostgresTypeConverter: Send + 'static {
     fn postgres_column(data: &PostgresColumnData) -> anyhow::Result<Column> {
         return Ok(Column {
             name: data.column_name.clone(),

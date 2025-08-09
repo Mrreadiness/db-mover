@@ -3,10 +3,10 @@ use rusqlite::{Connection, OpenFlags, params_from_iter};
 use tracing::debug;
 
 use crate::databases::{
-    sqlite::value::{SqliteColumnData, SqliteFromData, SqliteToData, SqliteTypeConvertor},
+    sqlite::value::{SqliteColumnData, SqliteFromData, SqliteToData, SqliteTypeConverter},
     table::Row,
     traits::{DBInfoProvider, DBReader, DBWriter},
-    type_convertor::DefaultTypeConvertor,
+    type_converter::DefaultTypeConverter,
 };
 
 use super::{
@@ -16,12 +16,12 @@ use super::{
 
 pub mod value;
 
-pub struct SqliteDB<T: SqliteTypeConvertor = DefaultTypeConvertor> {
+pub struct SqliteDB<T: SqliteTypeConverter = DefaultTypeConverter> {
     connection: Connection,
     _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl<T: SqliteTypeConvertor> SqliteDB<T> {
+impl<T: SqliteTypeConverter> SqliteDB<T> {
     pub fn new(uri: &str) -> anyhow::Result<Self> {
         let path = uri.replace("sqlite://", "");
         let conn = Connection::open_with_flags(
@@ -92,7 +92,7 @@ impl<T: SqliteTypeConvertor> SqliteDB<T> {
     }
 }
 
-impl<T: SqliteTypeConvertor> DBInfoProvider for SqliteDB<T> {
+impl<T: SqliteTypeConverter> DBInfoProvider for SqliteDB<T> {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
@@ -129,7 +129,7 @@ impl<T: SqliteTypeConvertor> DBInfoProvider for SqliteDB<T> {
 }
 
 #[ouroboros::self_referencing]
-struct SqliteRowsIter<'a, T: SqliteTypeConvertor> {
+struct SqliteRowsIter<'a, T: SqliteTypeConverter> {
     target_format: TableInfo,
     stmt: rusqlite::Statement<'a>,
     type_convetor: std::marker::PhantomData<T>,
@@ -139,7 +139,7 @@ struct SqliteRowsIter<'a, T: SqliteTypeConvertor> {
     rows: rusqlite::Rows<'this>,
 }
 
-impl<T: SqliteTypeConvertor> Iterator for SqliteRowsIter<'_, T> {
+impl<T: SqliteTypeConverter> Iterator for SqliteRowsIter<'_, T> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -173,7 +173,7 @@ impl<T: SqliteTypeConvertor> Iterator for SqliteRowsIter<'_, T> {
     }
 }
 
-impl<T: SqliteTypeConvertor> DBReader for SqliteDB<T> {
+impl<T: SqliteTypeConverter> DBReader for SqliteDB<T> {
     fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
         let query = format!(
             "SELECT {} FROM {}",
@@ -197,7 +197,7 @@ impl<T: SqliteTypeConvertor> DBReader for SqliteDB<T> {
     }
 }
 
-impl<T: SqliteTypeConvertor> DBWriter for SqliteDB<T> {
+impl<T: SqliteTypeConverter> DBWriter for SqliteDB<T> {
     fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
         // SQLite is not network dependent, assume that all errors are Unrecoverable
         return self

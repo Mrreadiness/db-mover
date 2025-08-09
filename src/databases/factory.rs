@@ -7,16 +7,16 @@ use crate::{
         postgres::PostgresDB,
         sqlite::SqliteDB,
         traits::{DBReader, DBWriter},
-        type_convertor::{DefaultTypeConvertor, TypeConvetor},
+        type_converter::{DefaultTypeConverter, TypeConveter},
     },
     uri::URI,
 };
 
-pub struct DBFactory<T: TypeConvetor = DefaultTypeConvertor> {
+pub struct DBFactory<T: TypeConveter = DefaultTypeConverter> {
     _type_convetor: std::marker::PhantomData<T>,
 }
 
-impl<T: TypeConvetor> Default for DBFactory<T> {
+impl<T: TypeConveter> Default for DBFactory<T> {
     fn default() -> Self {
         return Self {
             _type_convetor: std::marker::PhantomData,
@@ -24,7 +24,7 @@ impl<T: TypeConvetor> Default for DBFactory<T> {
     }
 }
 
-impl<T: TypeConvetor> DBFactory<T> {
+impl<T: TypeConveter> DBFactory<T> {
     fn build_sqlite(&self, uri: &str) -> anyhow::Result<Box<SqliteDB<T>>> {
         return Ok(Box::new(
             SqliteDB::new(uri).context("Unable to connect to the sqlite")?,

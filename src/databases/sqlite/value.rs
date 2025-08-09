@@ -23,7 +23,7 @@ pub struct SqliteToData<'a> {
     pub value: &'a Value,
 }
 
-pub trait SqliteTypeConvertor: Send + 'static {
+pub trait SqliteTypeConverter: Send + 'static {
     fn sqlite_column(data: SqliteColumnData) -> anyhow::Result<Column> {
         let column_type = Self::sqlite_column_type(&data)?;
         return Ok(Column {

@@ -44,7 +44,7 @@ pub struct MysqlToData<'a> {
     pub value: &'a Value,
 }
 
-pub trait MysqlTypeConvertor: Send + 'static {
+pub trait MysqlTypeConverter: Send + 'static {
     fn mysql_column(data: MysqlColumnData) -> anyhow::Result<Column> {
         let column_type = Self::mysql_column_type(&data)?;
         return Ok(Column {

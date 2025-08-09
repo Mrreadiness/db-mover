@@ -3,7 +3,7 @@ use tracing::info;
 
 use crate::databases::{
     factory::DBFactory,
-    type_convertor::{DefaultTypeConvertor, TypeConvetor},
+    type_converter::{DefaultTypeConverter, TypeConveter},
 };
 
 pub mod args;
@@ -15,10 +15,10 @@ pub mod table_migrator;
 pub mod uri;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
-    return run_with::<DefaultTypeConvertor>(args);
+    return run_with::<DefaultTypeConverter>(args);
 }
 
-pub fn run_with<T: TypeConvetor>(args: args::Args) -> anyhow::Result<()> {
+pub fn run_with<T: TypeConveter>(args: args::Args) -> anyhow::Result<()> {
     let factory: DBFactory<T> = DBFactory::default();
     let tables = get_tables(&args, &factory)?;
     for table in &tables {
@@ -36,7 +36,7 @@ pub fn run_with<T: TypeConvetor>(args: args::Args) -> anyhow::Result<()> {
 
 fn get_tables(
     args: &args::Args,
-    factory: &DBFactory<impl TypeConvetor>,
+    factory: &DBFactory<impl TypeConveter>,
 ) -> anyhow::Result<Vec<String>> {
     let tables = match args.table.len() {
         0 => {
