@@ -12,32 +12,32 @@ use crate::{
     uri::URI,
 };
 
-pub struct DBFactory<T: TypeConveter = DefaultTypeConverter> {
-    _type_convetor: std::marker::PhantomData<T>,
+pub struct DBFactory<TypeConverterT: TypeConveter = DefaultTypeConverter> {
+    _type_converter: std::marker::PhantomData<TypeConverterT>,
 }
 
-impl<T: TypeConveter> Default for DBFactory<T> {
+impl<TypeConverterT: TypeConveter> Default for DBFactory<TypeConverterT> {
     fn default() -> Self {
         return Self {
-            _type_convetor: std::marker::PhantomData,
+            _type_converter: std::marker::PhantomData,
         };
     }
 }
 
-impl<T: TypeConveter> DBFactory<T> {
-    fn build_sqlite(&self, uri: &str) -> anyhow::Result<Box<SqliteDB<T>>> {
+impl<TypeConverterT: TypeConveter> DBFactory<TypeConverterT> {
+    fn build_sqlite(&self, uri: &str) -> anyhow::Result<Box<SqliteDB<TypeConverterT>>> {
         return Ok(Box::new(
             SqliteDB::new(uri).context("Unable to connect to the sqlite")?,
         ));
     }
 
-    fn build_postgres(&self, uri: &str) -> anyhow::Result<Box<PostgresDB<T>>> {
+    fn build_postgres(&self, uri: &str) -> anyhow::Result<Box<PostgresDB<TypeConverterT>>> {
         return Ok(Box::new(
             PostgresDB::new(uri).context("Unable to connect to the postgres")?,
         ));
     }
 
-    fn build_mysql(&self, uri: &str, args: &Args) -> anyhow::Result<Box<MysqlDB<T>>> {
+    fn build_mysql(&self, uri: &str, args: &Args) -> anyhow::Result<Box<MysqlDB<TypeConverterT>>> {
         let options = MysqlTypeOptions {
             binary_16_as_uuid: !args.no_mysql_binary_16_as_uuid,
             ..Default::default()

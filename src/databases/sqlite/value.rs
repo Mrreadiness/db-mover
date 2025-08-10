@@ -4,37 +4,37 @@ use rusqlite::{
     types::{FromSql, ToSqlOutput, ValueRef},
 };
 
-pub struct SqliteColumnData<'a> {
+pub struct SqliteColumn<'a> {
     pub table: &'a str,
-    pub column_name: String,
+    pub name: String,
     pub column_type: String,
     pub nullable: bool,
 }
 
-pub struct SqliteFromData<'a> {
+pub struct SqliteReadInput<'a> {
     pub table: &'a str,
     pub column: &'a Column,
     pub value: ValueRef<'a>,
 }
 
-pub struct SqliteToData<'a> {
+pub struct SqliteWriteInput<'a> {
     pub table: &'a str,
     pub column: &'a Column,
     pub value: &'a Value,
 }
 
 pub trait SqliteTypeConverter: Send + 'static {
-    fn sqlite_column(data: SqliteColumnData) -> anyhow::Result<Column> {
-        let column_type = Self::sqlite_column_type(&data)?;
+    fn sqlite_column(column: SqliteColumn) -> anyhow::Result<Column> {
+        let column_type = Self::sqlite_column_type(&column)?;
         return Ok(Column {
-            name: data.column_name,
+            name: column.name,
             column_type,
-            nullable: data.nullable,
+            nullable: column.nullable,
         });
     }
 
-    fn sqlite_column_type(data: &SqliteColumnData) -> anyhow::Result<ColumnType> {
-        let type_formated = data.column_type.trim().to_lowercase();
+    fn sqlite_column_type(column: &SqliteColumn) -> anyhow::Result<ColumnType> {
+        let type_formated = column.column_type.trim().to_lowercase();
         if type_formated.starts_with("varchar")
             || type_formated.starts_with("nvarchar")
             || type_formated.starts_with("nchar")
@@ -59,33 +59,38 @@ pub trait SqliteTypeConverter: Send + 'static {
             "time" => ColumnType::Time,
             "json" | "jsonb" => ColumnType::Json,
             "uuid" => ColumnType::Uuid,
-            _ => return Err(anyhow::anyhow!("Unknown column type {}", data.column_type)),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Unknown column type {}",
+                    column.column_type
+                ));
+            }
         };
         return Ok(column_type);
     }
 
-    fn sqlite_from(data: SqliteFromData) -> anyhow::Result<Value> {
-        if data.value == ValueRef::Null {
+    fn sqlite_read_value(input: SqliteReadInput) -> anyhow::Result<Value> {
+        if input.value == ValueRef::Null {
             return Ok(Value::Null);
         }
-        let parsed = match data.column.column_type {
-            ColumnType::I64 => Value::I64(FromSql::column_result(data.value)?),
-            ColumnType::I32 => Value::I32(FromSql::column_result(data.value)?),
-            ColumnType::I16 => Value::I16(FromSql::column_result(data.value)?),
-            ColumnType::F64 => Value::F64(FromSql::column_result(data.value)?),
-            ColumnType::F32 => Value::F32(FromSql::column_result(data.value)?),
-            ColumnType::Bool => Value::Bool(FromSql::column_result(data.value)?),
-            ColumnType::String => Value::String(FromSql::column_result(data.value)?),
+        let parsed = match input.column.column_type {
+            ColumnType::I64 => Value::I64(FromSql::column_result(input.value)?),
+            ColumnType::I32 => Value::I32(FromSql::column_result(input.value)?),
+            ColumnType::I16 => Value::I16(FromSql::column_result(input.value)?),
+            ColumnType::F64 => Value::F64(FromSql::column_result(input.value)?),
+            ColumnType::F32 => Value::F32(FromSql::column_result(input.value)?),
+            ColumnType::Bool => Value::Bool(FromSql::column_result(input.value)?),
+            ColumnType::String => Value::String(FromSql::column_result(input.value)?),
             ColumnType::Bytes => {
-                let buff: Vec<u8> = FromSql::column_result(data.value)?;
+                let buff: Vec<u8> = FromSql::column_result(input.value)?;
                 Value::Bytes(bytes::Bytes::from(buff))
             }
-            ColumnType::Timestamptz => Value::Timestamptz(FromSql::column_result(data.value)?),
-            ColumnType::Timestamp => Value::Timestamp(FromSql::column_result(data.value)?),
-            ColumnType::Date => Value::Date(FromSql::column_result(data.value)?),
-            ColumnType::Time => Value::Time(FromSql::column_result(data.value)?),
-            ColumnType::Json => Value::Json(FromSql::column_result(data.value)?),
-            ColumnType::Uuid => Value::Uuid(FromSql::column_result(data.value)?),
+            ColumnType::Timestamptz => Value::Timestamptz(FromSql::column_result(input.value)?),
+            ColumnType::Timestamp => Value::Timestamp(FromSql::column_result(input.value)?),
+            ColumnType::Date => Value::Date(FromSql::column_result(input.value)?),
+            ColumnType::Time => Value::Time(FromSql::column_result(input.value)?),
+            ColumnType::Json => Value::Json(FromSql::column_result(input.value)?),
+            ColumnType::Uuid => Value::Uuid(FromSql::column_result(input.value)?),
             ColumnType::Decimal => {
                 return Err(anyhow::anyhow!("Decimal is not supported for sqlite"));
             }
@@ -93,8 +98,8 @@ pub trait SqliteTypeConverter: Send + 'static {
         return Ok(parsed);
     }
 
-    fn sqlite_to(data: SqliteToData<'_>) -> anyhow::Result<ToSqlOutput<'_>> {
-        let output = match data.value {
+    fn sqlite_write_value(input: SqliteWriteInput<'_>) -> anyhow::Result<ToSqlOutput<'_>> {
+        let output = match input.value {
             Value::Null => ToSqlOutput::from(rusqlite::types::Null),
             Value::I64(val) => val.to_sql()?,
             Value::I32(val) => val.to_sql()?,

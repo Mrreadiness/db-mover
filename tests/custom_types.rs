@@ -25,62 +25,64 @@ static CUSTOM_STRING_OVERRIDE: &str = "CustomTypeConverter override";
 static CUSTOM_F32_OVERRIDE: f32 = -1.1;
 
 impl SqliteTypeConverter for CustomTypeConverter {
-    fn sqlite_from(
-        data: db_mover::databases::sqlite::value::SqliteFromData,
+    fn sqlite_read_value(
+        data: db_mover::databases::sqlite::value::SqliteReadInput,
     ) -> anyhow::Result<db_mover::databases::table::Value> {
         if data.column.column_type == ColumnType::String {
             return Ok(Value::String(CUSTOM_STRING_OVERRIDE.to_string()));
         }
-        return DefaultTypeConverter::sqlite_from(data);
+        return DefaultTypeConverter::sqlite_read_value(data);
     }
 
-    fn sqlite_to(
-        data: db_mover::databases::sqlite::value::SqliteToData<'_>,
+    fn sqlite_write_value(
+        data: db_mover::databases::sqlite::value::SqliteWriteInput<'_>,
     ) -> anyhow::Result<rusqlite::types::ToSqlOutput<'_>> {
         if data.column.column_type == ColumnType::F32 {
             return CUSTOM_F32_OVERRIDE
                 .to_sql()
                 .context("Failed to convert F32 for CustomTypeConverter");
         }
-        return DefaultTypeConverter::sqlite_to(data);
+        return DefaultTypeConverter::sqlite_write_value(data);
     }
 }
 impl PostgresTypeConverter for CustomTypeConverter {
-    fn postgres_from(
-        data: db_mover::databases::postgres::value::PostgresFromData,
+    fn postgres_read_value(
+        data: db_mover::databases::postgres::value::PostgresReadInput,
     ) -> anyhow::Result<Value> {
         if data.column.column_type == ColumnType::String {
             return Ok(Value::String(CUSTOM_STRING_OVERRIDE.to_string()));
         }
-        return DefaultTypeConverter::postgres_from(data);
+        return DefaultTypeConverter::postgres_read_value(data);
     }
 
-    fn postgres_to(
+    fn postgres_write_value(
         writer: &mut postgres::CopyInWriter<'_>,
-        data: db_mover::databases::postgres::value::PostgresToData,
+        data: db_mover::databases::postgres::value::PostgresWriteInput,
     ) -> Result<(), db_mover::databases::traits::WriterError> {
         if data.column.column_type == ColumnType::F32 {
             writer.write_all(&(size_of_val(&CUSTOM_F32_OVERRIDE) as i32).to_be_bytes())?;
             writer.write_all(&CUSTOM_F32_OVERRIDE.to_be_bytes())?;
             return Ok(());
         }
-        return DefaultTypeConverter::postgres_to(writer, data);
+        return DefaultTypeConverter::postgres_write_value(writer, data);
     }
 }
 impl MysqlTypeConverter for CustomTypeConverter {
-    fn mysql_from(data: db_mover::databases::mysql::value::MysqlFromData) -> anyhow::Result<Value> {
+    fn mysql_read_value(
+        data: db_mover::databases::mysql::value::MysqlReadInput,
+    ) -> anyhow::Result<Value> {
         if data.column.column_type == ColumnType::String {
             return Ok(Value::String(CUSTOM_STRING_OVERRIDE.to_string()));
         }
-        return DefaultTypeConverter::mysql_from(data);
+        return DefaultTypeConverter::mysql_read_value(data);
     }
-    fn mysql_to(
-        data: db_mover::databases::mysql::value::MysqlToData<'_>,
+    fn mysql_write_value(
+        data: db_mover::databases::mysql::value::MysqlWriteInput<'_>,
     ) -> anyhow::Result<mysql::Value> {
         if data.column.column_type == ColumnType::F32 {
             return Ok(mysql::Value::Float(CUSTOM_F32_OVERRIDE));
         }
-        return DefaultTypeConverter::mysql_to(data);
+        return DefaultTypeConverter::mysql_write_value(data);
     }
 }
 

@@ -23,47 +23,47 @@ pub struct MysqlConstraint {
     pub clause: Option<String>,
 }
 
-pub struct MysqlColumnData<'a> {
+pub struct MysqlColumn<'a> {
     pub table: &'a str,
-    pub column_name: String,
+    pub name: String,
     pub column_type: String,
     pub nullable: bool,
     pub options: &'a MysqlTypeOptions,
     pub table_constraints: &'a [MysqlConstraint],
 }
 
-pub struct MysqlFromData<'a> {
+pub struct MysqlReadInput<'a> {
     pub table: &'a str,
     pub column: &'a Column,
     pub value: mysql::Value,
 }
 
-pub struct MysqlToData<'a> {
+pub struct MysqlWriteInput<'a> {
     pub table: &'a str,
     pub column: &'a Column,
     pub value: &'a Value,
 }
 
 pub trait MysqlTypeConverter: Send + 'static {
-    fn mysql_column(data: MysqlColumnData) -> anyhow::Result<Column> {
-        let column_type = Self::mysql_column_type(&data)?;
+    fn mysql_column(column: MysqlColumn) -> anyhow::Result<Column> {
+        let column_type = Self::mysql_column_type(&column)?;
         return Ok(Column {
-            name: data.column_name,
+            name: column.name,
             column_type,
-            nullable: data.nullable,
+            nullable: column.nullable,
         });
     }
 
-    fn mysql_column_type(data: &MysqlColumnData) -> anyhow::Result<ColumnType> {
-        let formated = data.column_type.trim().to_lowercase();
-        if data.options.binary_16_as_uuid && formated == "binary(16)" {
+    fn mysql_column_type(column: &MysqlColumn) -> anyhow::Result<ColumnType> {
+        let formated = column.column_type.trim().to_lowercase();
+        if column.options.binary_16_as_uuid && formated == "binary(16)" {
             return Ok(ColumnType::Uuid);
         }
-        if data.options.tinyint_as_bool && formated == "tinyint(1)" {
+        if column.options.tinyint_as_bool && formated == "tinyint(1)" {
             return Ok(ColumnType::Bool);
         }
-        let json_constraint = Some(format!("json_valid(`{}`)", data.column_name));
-        if data
+        let json_constraint = Some(format!("json_valid(`{}`)", column.name));
+        if column
             .table_constraints
             .iter()
             .any(|constraint| constraint.clause == json_constraint)
@@ -99,41 +99,44 @@ pub trait MysqlTypeConverter: Send + 'static {
             "date" => Ok(ColumnType::Date),
             "time" => Ok(ColumnType::Time),
             "json" => Ok(ColumnType::Json),
-            _ => Err(anyhow::anyhow!("Unknown column type {}", data.column_type)),
+            _ => Err(anyhow::anyhow!(
+                "Unknown column type {}",
+                column.column_type
+            )),
         };
     }
 
-    fn mysql_from(data: MysqlFromData) -> anyhow::Result<Value> {
-        if data.value == mysql::Value::NULL {
+    fn mysql_read_value(input: MysqlReadInput) -> anyhow::Result<Value> {
+        if input.value == mysql::Value::NULL {
             return Ok(Value::Null);
         }
-        let parsed = match data.column.column_type {
-            ColumnType::I64 => Value::I64(mysql::from_value_opt(data.value)?),
-            ColumnType::I32 => Value::I32(mysql::from_value_opt(data.value)?),
-            ColumnType::I16 => Value::I16(mysql::from_value_opt(data.value)?),
-            ColumnType::F64 => Value::F64(mysql::from_value_opt(data.value)?),
-            ColumnType::F32 => Value::F32(mysql::from_value_opt(data.value)?),
-            ColumnType::Decimal => Value::Decimal(mysql::from_value_opt(data.value)?),
-            ColumnType::Bool => Value::Bool(mysql::from_value_opt(data.value)?),
-            ColumnType::String => Value::String(mysql::from_value_opt(data.value)?),
+        let parsed = match input.column.column_type {
+            ColumnType::I64 => Value::I64(mysql::from_value_opt(input.value)?),
+            ColumnType::I32 => Value::I32(mysql::from_value_opt(input.value)?),
+            ColumnType::I16 => Value::I16(mysql::from_value_opt(input.value)?),
+            ColumnType::F64 => Value::F64(mysql::from_value_opt(input.value)?),
+            ColumnType::F32 => Value::F32(mysql::from_value_opt(input.value)?),
+            ColumnType::Decimal => Value::Decimal(mysql::from_value_opt(input.value)?),
+            ColumnType::Bool => Value::Bool(mysql::from_value_opt(input.value)?),
+            ColumnType::String => Value::String(mysql::from_value_opt(input.value)?),
             ColumnType::Bytes => Value::Bytes(bytes::Bytes::from(
-                mysql::from_value_opt::<Vec<u8>>(data.value)?,
+                mysql::from_value_opt::<Vec<u8>>(input.value)?,
             )),
-            ColumnType::Timestamp => Value::Timestamp(mysql::from_value_opt(data.value)?),
+            ColumnType::Timestamp => Value::Timestamp(mysql::from_value_opt(input.value)?),
             ColumnType::Timestamptz => {
-                let dt: NaiveDateTime = mysql::from_value_opt(data.value)?;
+                let dt: NaiveDateTime = mysql::from_value_opt(input.value)?;
                 Value::Timestamptz(Utc.from_utc_datetime(&dt)) // UTC timezone set on connection
             }
-            ColumnType::Date => Value::Date(mysql::from_value_opt(data.value)?),
-            ColumnType::Time => Value::Time(mysql::from_value_opt(data.value)?),
-            ColumnType::Json => Value::Json(mysql::from_value_opt(data.value)?),
-            ColumnType::Uuid => Value::Uuid(mysql::from_value_opt(data.value)?),
+            ColumnType::Date => Value::Date(mysql::from_value_opt(input.value)?),
+            ColumnType::Time => Value::Time(mysql::from_value_opt(input.value)?),
+            ColumnType::Json => Value::Json(mysql::from_value_opt(input.value)?),
+            ColumnType::Uuid => Value::Uuid(mysql::from_value_opt(input.value)?),
         };
         return Ok(parsed);
     }
 
-    fn mysql_to(data: MysqlToData<'_>) -> anyhow::Result<mysql::Value> {
-        let result = match data.value {
+    fn mysql_write_value(input: MysqlWriteInput) -> anyhow::Result<mysql::Value> {
+        let result = match input.value {
             Value::Null => mysql::Value::NULL,
             Value::I64(val) => val.into(),
             Value::I32(val) => val.into(),

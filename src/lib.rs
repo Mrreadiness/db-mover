@@ -18,8 +18,8 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
     return run_with::<DefaultTypeConverter>(args);
 }
 
-pub fn run_with<T: TypeConveter>(args: args::Args) -> anyhow::Result<()> {
-    let factory: DBFactory<T> = DBFactory::default();
+pub fn run_with<TypeConverterT: TypeConveter>(args: args::Args) -> anyhow::Result<()> {
+    let factory: DBFactory<TypeConverterT> = DBFactory::default();
     let tables = get_tables(&args, &factory)?;
     for table in &tables {
         let reader = factory.create_reader(&args)?;

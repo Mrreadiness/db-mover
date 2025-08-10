@@ -8,7 +8,7 @@ use tracing::debug;
 pub use value::MysqlTypeOptions;
 
 use crate::databases::mysql::value::{
-    MysqlColumnData, MysqlConstraint, MysqlToData, MysqlTypeConverter,
+    MysqlColumn, MysqlConstraint, MysqlTypeConverter, MysqlWriteInput,
 };
 use crate::databases::table::Row;
 use crate::databases::traits::{DBInfoProvider, DBReader};
@@ -19,15 +19,15 @@ use super::traits::{DBWriter, ReaderIterator, WriterError};
 
 pub mod value;
 
-pub struct MysqlDB<T: MysqlTypeConverter = DefaultTypeConverter> {
+pub struct MysqlDB<TypeConverterT: MysqlTypeConverter = DefaultTypeConverter> {
     uri: String,
     connection: Conn,
     type_options: MysqlTypeOptions,
     stmt_cache: HashMap<(String, usize, usize), mysql::Statement>,
-    _type_convetor: std::marker::PhantomData<T>,
+    _type_converter: std::marker::PhantomData<TypeConverterT>,
 }
 
-impl<T: MysqlTypeConverter> MysqlDB<T> {
+impl<TypeConverterT: MysqlTypeConverter> MysqlDB<TypeConverterT> {
     pub fn new(uri: &str, type_options: MysqlTypeOptions) -> anyhow::Result<Self> {
         let connection = Self::connect(uri)?;
         debug!("Connected to mysql {uri}");
@@ -36,7 +36,7 @@ impl<T: MysqlTypeConverter> MysqlDB<T> {
             connection,
             type_options,
             stmt_cache: HashMap::new(),
-            _type_convetor: std::marker::PhantomData,
+            _type_converter: std::marker::PhantomData,
         });
     }
 
@@ -119,7 +119,7 @@ impl<T: MysqlTypeConverter> MysqlDB<T> {
     }
 }
 
-impl<T: MysqlTypeConverter> DBInfoProvider for MysqlDB<T> {
+impl<TypeConverterT: MysqlTypeConverter> DBInfoProvider for MysqlDB<TypeConverterT> {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
@@ -148,9 +148,9 @@ impl<T: MysqlTypeConverter> DBInfoProvider for MysqlDB<T> {
                 .get_opt(2)
                 .context("Value expected")?
                 .context("Couldn't parse column nullable")?;
-            columns.push(T::mysql_column(MysqlColumnData {
+            columns.push(TypeConverterT::mysql_column(MysqlColumn {
                 table,
-                column_name,
+                name: column_name,
                 column_type,
                 nullable: nullable.as_str() == "YES",
                 options: &self.type_options,
@@ -180,14 +180,14 @@ impl<T: MysqlTypeConverter> DBInfoProvider for MysqlDB<T> {
     }
 }
 
-struct MysqlRowsIter<'a, T: MysqlTypeConverter> {
+struct MysqlRowsIter<'a, TypeConverterT: MysqlTypeConverter> {
     target_format: TableInfo,
     rows: mysql::QueryResult<'a, 'a, 'a, mysql::Text>,
 
-    type_convetor: std::marker::PhantomData<T>,
+    type_converter: std::marker::PhantomData<TypeConverterT>,
 }
 
-impl<T: MysqlTypeConverter> Iterator for MysqlRowsIter<'_, T> {
+impl<TypeConverterT: MysqlTypeConverter> Iterator for MysqlRowsIter<'_, TypeConverterT> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -197,7 +197,7 @@ impl<T: MysqlTypeConverter> Iterator for MysqlRowsIter<'_, T> {
                 let values = row.unwrap();
                 assert_eq!(values.len(), self.target_format.columns.len());
                 for (column, value) in std::iter::zip(&self.target_format.columns, values) {
-                    match T::mysql_from(value::MysqlFromData {
+                    match TypeConverterT::mysql_read_value(value::MysqlReadInput {
                         table: &self.target_format.name,
                         column,
                         value,
@@ -214,7 +214,7 @@ impl<T: MysqlTypeConverter> Iterator for MysqlRowsIter<'_, T> {
     }
 }
 
-impl<T: MysqlTypeConverter> DBReader for MysqlDB<T> {
+impl<TypeConverterT: MysqlTypeConverter> DBReader for MysqlDB<TypeConverterT> {
     fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
         let query = format!(
             "SELECT {} FROM {}",
@@ -228,14 +228,14 @@ impl<T: MysqlTypeConverter> DBReader for MysqlDB<T> {
         return Ok(Box::new(MysqlRowsIter {
             target_format,
             rows,
-            type_convetor: std::marker::PhantomData::<T>,
+            type_converter: std::marker::PhantomData::<TypeConverterT>,
         }));
     }
 }
 
-impl<T: MysqlTypeConverter> DBWriter for MysqlDB<T> {
+impl<TypeConverterT: MysqlTypeConverter> DBWriter for MysqlDB<TypeConverterT> {
     fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
-        let new: MysqlDB<T> = MysqlDB::new(&self.uri, self.type_options.clone())?;
+        let new: MysqlDB<TypeConverterT> = MysqlDB::new(&self.uri, self.type_options.clone())?;
         return Ok(Box::new(new));
     }
 
@@ -245,7 +245,7 @@ impl<T: MysqlTypeConverter> DBWriter for MysqlDB<T> {
         for row in batch {
             for (value, column) in std::iter::zip(row, &table.columns) {
                 values.push(
-                    T::mysql_to(MysqlToData {
+                    TypeConverterT::mysql_write_value(MysqlWriteInput {
                         table: &table.name,
                         column,
                         value,
