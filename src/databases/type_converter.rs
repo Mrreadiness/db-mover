@@ -1,6 +1,6 @@
-use crate::databases::mysql::value::MysqlTypeConverter;
-use crate::databases::postgres::value::PostgresTypeConverter;
-use crate::databases::sqlite::value::SqliteTypeConverter;
+use crate::databases::mysql::type_converter::MysqlTypeConverter;
+use crate::databases::postgres::type_converter::PostgresTypeConverter;
+use crate::databases::sqlite::type_converter::SqliteTypeConverter;
 
 pub trait TypeConveter:
     PostgresTypeConverter + MysqlTypeConverter + SqliteTypeConverter + 'static

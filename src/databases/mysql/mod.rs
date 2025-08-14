@@ -5,9 +5,9 @@ use itertools::Itertools;
 use mysql::prelude::Queryable;
 use mysql::{Conn, Opts, params};
 use tracing::debug;
-pub use value::MysqlTypeOptions;
+pub use type_converter::MysqlTypeOptions;
 
-use crate::databases::mysql::value::{
+use crate::databases::mysql::type_converter::{
     MysqlColumn, MysqlConstraint, MysqlTypeConverter, MysqlWriteInput,
 };
 use crate::databases::table::Row;
@@ -17,7 +17,7 @@ use crate::databases::type_converter::DefaultTypeConverter;
 use super::table::TableInfo;
 use super::traits::{DBWriter, ReaderIterator, WriterError};
 
-pub mod value;
+pub mod type_converter;
 
 pub struct MysqlDB<TypeConverterT: MysqlTypeConverter = DefaultTypeConverter> {
     uri: String,
@@ -197,7 +197,7 @@ impl<TypeConverterT: MysqlTypeConverter> Iterator for MysqlRowsIter<'_, TypeConv
                 let values = row.unwrap();
                 assert_eq!(values.len(), self.target_format.columns.len());
                 for (column, value) in std::iter::zip(&self.target_format.columns, values) {
-                    match TypeConverterT::mysql_read_value(value::MysqlReadInput {
+                    match TypeConverterT::mysql_read_value(type_converter::MysqlReadInput {
                         table: &self.target_format.name,
                         column,
                         value,

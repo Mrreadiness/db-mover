@@ -6,9 +6,9 @@ use itertools::izip;
 use postgres::fallible_iterator::FallibleIterator;
 use postgres::{Client, NoTls};
 use tracing::debug;
-use value::PostgresColumn;
+use type_converter::PostgresColumn;
 
-use crate::databases::postgres::value::{
+use crate::databases::postgres::type_converter::{
     PostgresReadInput, PostgresTypeConverter, PostgresWriteInput,
 };
 use crate::databases::table::Row;
@@ -18,7 +18,7 @@ use crate::databases::type_converter::DefaultTypeConverter;
 use super::table::{Column, TableInfo};
 use super::traits::{ReaderIterator, WriterError};
 
-pub mod value;
+pub mod type_converter;
 
 pub struct PostgresDB<TypeConverterT: PostgresTypeConverter = DefaultTypeConverter> {
     uri: String,

@@ -3,7 +3,9 @@ use rusqlite::{Connection, OpenFlags, params_from_iter};
 use tracing::debug;
 
 use crate::databases::{
-    sqlite::value::{SqliteColumn, SqliteReadInput, SqliteTypeConverter, SqliteWriteInput},
+    sqlite::type_converter::{
+        SqliteColumn, SqliteReadInput, SqliteTypeConverter, SqliteWriteInput,
+    },
     table::Row,
     traits::{DBInfoProvider, DBReader, DBWriter},
     type_converter::DefaultTypeConverter,
@@ -14,7 +16,7 @@ use super::{
     traits::{ReaderIterator, WriterError},
 };
 
-pub mod value;
+pub mod type_converter;
 
 pub struct SqliteDB<TypeConverterT: SqliteTypeConverter = DefaultTypeConverter> {
     connection: Connection,
