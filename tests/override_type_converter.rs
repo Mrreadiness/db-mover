@@ -89,7 +89,10 @@ impl MysqlTypeConverter for CustomTypeConverter {
 impl TypeConveter for CustomTypeConverter {}
 
 #[apply(all_databases_combinations)]
-fn custom_type_converter_from(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+fn custom_type_converter_override_from(
+    mut in_db: impl TestableDatabase,
+    mut out_db: impl TestableDatabase,
+) {
     in_db.create_test_table("test");
     out_db.create_test_table("test");
     in_db.fill_test_table("test", 10);
@@ -105,7 +108,10 @@ fn custom_type_converter_from(mut in_db: impl TestableDatabase, mut out_db: impl
 }
 
 #[apply(all_databases_combinations)]
-fn custom_type_converter_to(mut in_db: impl TestableDatabase, mut out_db: impl TestableDatabase) {
+fn custom_type_converter_override_to(
+    mut in_db: impl TestableDatabase,
+    mut out_db: impl TestableDatabase,
+) {
     in_db.create_test_table("test");
     out_db.create_test_table("test");
     in_db.fill_test_table("test", 10);

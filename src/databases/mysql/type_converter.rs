@@ -131,6 +131,11 @@ pub trait MysqlTypeConverter: Send + 'static {
             ColumnType::Time => Value::Time(mysql::from_value_opt(input.value)?),
             ColumnType::Json => Value::Json(mysql::from_value_opt(input.value)?),
             ColumnType::Uuid => Value::Uuid(mysql::from_value_opt(input.value)?),
+            ColumnType::Custom(ref name) => {
+                return Err(anyhow::anyhow!(
+                    "Custom type '{name}' is not supported by default MysqlTypeConverter"
+                ));
+            }
         };
         return Ok(parsed);
     }
@@ -153,6 +158,12 @@ pub trait MysqlTypeConverter: Send + 'static {
             Value::Time(val) => val.into(),
             Value::Json(val) => val.into(),
             Value::Uuid(val) => val.into(),
+            Value::Custom(_) => {
+                return Err(anyhow::anyhow!(
+                    "Custom Value for type {:?} is not supported by default MysqlTypeConverter",
+                    input.column.column_type
+                ));
+            }
         };
         return Ok(result);
     }

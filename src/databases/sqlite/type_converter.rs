@@ -94,6 +94,11 @@ pub trait SqliteTypeConverter: Send + 'static {
             ColumnType::Decimal => {
                 return Err(anyhow::anyhow!("Decimal is not supported for sqlite"));
             }
+            ColumnType::Custom(ref name) => {
+                return Err(anyhow::anyhow!(
+                    "Custom type '{name}' is not supported by default SqliteTypeConverter"
+                ));
+            }
         };
         return Ok(parsed);
     }
@@ -117,6 +122,12 @@ pub trait SqliteTypeConverter: Send + 'static {
             Value::Uuid(val) => val.to_sql()?,
             Value::Decimal(_) => {
                 return Err(anyhow::anyhow!("Decimal is not supported for sqlite"));
+            }
+            Value::Custom(_) => {
+                return Err(anyhow::anyhow!(
+                    "Custom Value for type {:?} is not supported by default SqliteTypeConverter",
+                    input.column.column_type
+                ));
             }
         };
         return Ok(output);

@@ -147,6 +147,11 @@ pub trait PostgresTypeConverter: Send + 'static {
             ColumnType::Uuid => row
                 .get::<_, Option<uuid::Uuid>>(idx)
                 .map_or(Value::Null, Value::Uuid),
+            ColumnType::Custom(ref name) => {
+                return Err(anyhow::anyhow!(
+                    "Custom type '{name}' is not supported by default PostgresTypeConverter"
+                ));
+            }
         };
         return Ok(value);
     }
@@ -240,6 +245,12 @@ pub trait PostgresTypeConverter: Send + 'static {
                 let bytes = val.as_bytes();
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
                 writer.write_all(bytes)?;
+            }
+            &Value::Custom(_) => {
+                return Err(WriterError::Unrecoverable(anyhow::anyhow!(
+                    "Custom Value for type {:?} is not supported by default PostgresTypeConverter",
+                    input.column.column_type
+                )));
             }
         };
         return Ok(());

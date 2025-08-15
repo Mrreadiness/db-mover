@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rust_decimal::Decimal;
 
@@ -19,11 +21,12 @@ pub enum Value {
     Json(serde_json::Value),
     Uuid(uuid::Uuid),
     Null,
+    Custom(bytes::Bytes),
 }
 
 pub type Row = Vec<Value>;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ColumnType {
     String,
     Bytes,
@@ -40,6 +43,7 @@ pub enum ColumnType {
     Time,
     Uuid,
     Json,
+    Custom(Cow<'static, str>),
 }
 
 #[derive(Clone, Debug)]
