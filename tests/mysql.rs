@@ -163,7 +163,7 @@ fn mysql_table_list(
     #[values(TestMysqlDatabase::new_mysql(), TestMysqlDatabase::new_mariadb())]
     mut test_db: TestMysqlDatabase,
 ) {
-    let mut db = MysqlDB::new(&test_db.uri, MysqlTypeOptions::default()).unwrap();
+    let mut db: MysqlDB = MysqlDB::new(&test_db.uri, MysqlTypeOptions::default()).unwrap();
 
     let tables = db.get_tables().unwrap();
     assert_eq!(tables.len(), 0);

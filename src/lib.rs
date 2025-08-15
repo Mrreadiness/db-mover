@@ -1,6 +1,11 @@
 use anyhow::Context;
 use tracing::info;
 
+use crate::databases::{
+    factory::DBFactory,
+    type_converter::{DefaultTypeConverter, TypeConveter},
+};
+
 pub mod args;
 pub mod channel;
 pub mod databases;
@@ -10,10 +15,15 @@ pub mod table_migrator;
 pub mod uri;
 
 pub fn run(args: args::Args) -> anyhow::Result<()> {
-    let tables = get_tables(&args)?;
+    return run_with::<DefaultTypeConverter>(args);
+}
+
+pub fn run_with<TypeConverterT: TypeConveter>(args: args::Args) -> anyhow::Result<()> {
+    let factory: DBFactory<TypeConverterT> = DBFactory::default();
+    let tables = get_tables(&args, &factory)?;
     for table in &tables {
-        let reader = args.create_reader()?;
-        let writer = args.create_writer()?;
+        let reader = factory.create_reader(&args)?;
+        let writer = factory.create_writer(&args)?;
         info!("Processing table \"{table}\"");
         let migrator = table_migrator::TableMigrator::new(reader, writer, table, (&args).into())?;
         if !args.dry_run {
@@ -24,10 +34,13 @@ pub fn run(args: args::Args) -> anyhow::Result<()> {
     return Ok(());
 }
 
-fn get_tables(args: &args::Args) -> anyhow::Result<Vec<String>> {
+fn get_tables(
+    args: &args::Args,
+    factory: &DBFactory<impl TypeConveter>,
+) -> anyhow::Result<Vec<String>> {
     let tables = match args.table.len() {
         0 => {
-            let mut reader = args.create_reader()?;
+            let mut reader = factory.create_reader(args)?;
             reader
                 .get_tables()
                 .context("Failed to get list of tables from input database")?
@@ -43,7 +56,7 @@ fn get_tables(args: &args::Args) -> anyhow::Result<Vec<String>> {
             .join(", ")
     );
     let writer_tables = {
-        let mut writer = args.create_writer()?;
+        let mut writer = factory.create_writer(args)?;
         writer
             .get_tables()
             .context("Failed to get list of tables from output database")?

@@ -5,38 +5,38 @@ use itertools::Itertools;
 use mysql::prelude::Queryable;
 use mysql::{Conn, Opts, params};
 use tracing::debug;
-pub use value::MysqlTypeOptions;
+pub use type_converter::MysqlTypeOptions;
 
-use crate::databases::table::{Row, Value};
+use crate::databases::mysql::type_converter::{
+    MysqlColumn, MysqlConstraint, MysqlTypeConverter, MysqlWriteInput,
+};
+use crate::databases::table::Row;
 use crate::databases::traits::{DBInfoProvider, DBReader};
+use crate::databases::type_converter::DefaultTypeConverter;
 
-use super::table::{Column, ColumnType, TableInfo};
+use super::table::TableInfo;
 use super::traits::{DBWriter, ReaderIterator, WriterError};
 
-mod value;
+pub mod type_converter;
 
-pub struct MysqlDB {
+pub struct MysqlDB<TypeConverterT: MysqlTypeConverter = DefaultTypeConverter> {
     uri: String,
     connection: Conn,
-    is_mariadb: bool,
     type_options: MysqlTypeOptions,
     stmt_cache: HashMap<(String, usize, usize), mysql::Statement>,
+    _type_converter: std::marker::PhantomData<TypeConverterT>,
 }
 
-impl MysqlDB {
+impl<TypeConverterT: MysqlTypeConverter> MysqlDB<TypeConverterT> {
     pub fn new(uri: &str, type_options: MysqlTypeOptions) -> anyhow::Result<Self> {
-        let mut connection = Self::connect(uri)?;
+        let connection = Self::connect(uri)?;
         debug!("Connected to mysql {uri}");
-        let version: String = connection
-            .query_first("SELECT VERSION()")
-            .context("Unable to fetch database version")?
-            .unwrap();
         return Ok(Self {
             uri: uri.to_string(),
             connection,
-            is_mariadb: version.contains("MariaDB"),
             type_options,
             stmt_cache: HashMap::new(),
+            _type_converter: std::marker::PhantomData,
         });
     }
 
@@ -76,9 +76,50 @@ impl MysqlDB {
             }
         };
     }
+
+    fn get_table_constraints(&mut self, table: &str) -> anyhow::Result<Vec<MysqlConstraint>> {
+        return self
+            .connection
+            .exec(
+                r"SELECT
+                    tc.CONSTRAINT_NAME,
+                    tc.CONSTRAINT_TYPE,
+                    cc.CHECK_CLAUSE
+                  FROM
+                    INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                  LEFT JOIN
+                    INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+                    ON cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+                    AND cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+                  WHERE tc.CONSTRAINT_SCHEMA = database() and tc.TABLE_NAME = :table",
+                params! {table},
+            )?
+            .into_iter()
+            .map(|row: mysql::Row| {
+                let name: String = row
+                    .get_opt(0)
+                    .context("Value expected")?
+                    .context("Couldn't parse constraint name")?;
+                let constraint_type: String = row
+                    .get_opt(1)
+                    .context("Value expected")?
+                    .context("Couldn't parse constraint type")?;
+                let clause: Option<String> = row
+                    .get_opt(2)
+                    .context("Value expected")?
+                    .context("Couldn't parse constraint clause")?;
+                Ok(MysqlConstraint {
+                    name,
+                    constraint_type,
+                    clause,
+                })
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .context("Failed to get infomration about table constraints");
+    }
 }
 
-impl DBInfoProvider for MysqlDB {
+impl<TypeConverterT: MysqlTypeConverter> DBInfoProvider for MysqlDB<TypeConverterT> {
     fn get_table_info(&mut self, table: &str, no_count: bool) -> anyhow::Result<TableInfo> {
         let mut num_rows = None;
         if !no_count {
@@ -92,13 +133,14 @@ impl DBInfoProvider for MysqlDB {
                                                                 FROM INFORMATION_SCHEMA.COLUMNS 
                                                                 WHERE table_name = :table AND TABLE_SCHEMA = database()
                                                                 ORDER BY ORDINAL_POSITION", params! {table})?;
+        let constraints = self.get_table_constraints(table)?;
         let mut columns = Vec::with_capacity(info_rows.len());
         for row in info_rows {
-            let name = row
+            let column_name = row
                 .get_opt(0)
                 .context("Value expected")?
                 .context("Couldn't parse column name")?;
-            let mut column_type: String = row
+            let column_type: String = row
                 .get_opt(1)
                 .context("Value expected")?
                 .context("Couldn't parse column type")?;
@@ -106,21 +148,14 @@ impl DBInfoProvider for MysqlDB {
                 .get_opt(2)
                 .context("Value expected")?
                 .context("Couldn't parse column nullable")?;
-            if column_type == "longtext" && self.is_mariadb {
-                let num_json_constraints: usize = self.connection.exec_first(
-                    r"SELECT count(1) FROM INFORMATION_SCHEMA.check_constraints
-                    WHERE CONSTRAINT_SCHEMA = database() AND TABLE_NAME = :table AND CHECK_CLAUSE = :clause",
-                    params! {table, "clause" => format!("json_valid(`{name}`)")},
-                ).context("Failed to check json constraint")?.unwrap();
-                if num_json_constraints > 0 {
-                    column_type = String::from("json");
-                }
-            }
-            columns.push(Column {
-                name,
-                column_type: ColumnType::try_from_mysql_type(&column_type, &self.type_options)?,
+            columns.push(TypeConverterT::mysql_column(MysqlColumn {
+                table,
+                name: column_name,
+                column_type,
                 nullable: nullable.as_str() == "YES",
-            });
+                options: &self.type_options,
+                table_constraints: &constraints,
+            })?);
         }
 
         return Ok(TableInfo {
@@ -145,12 +180,14 @@ impl DBInfoProvider for MysqlDB {
     }
 }
 
-struct MysqlRowsIter<'a> {
+struct MysqlRowsIter<'a, TypeConverterT: MysqlTypeConverter> {
     target_format: TableInfo,
     rows: mysql::QueryResult<'a, 'a, 'a, mysql::Text>,
+
+    type_converter: std::marker::PhantomData<TypeConverterT>,
 }
 
-impl Iterator for MysqlRowsIter<'_> {
+impl<TypeConverterT: MysqlTypeConverter> Iterator for MysqlRowsIter<'_, TypeConverterT> {
     type Item = anyhow::Result<Row>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -160,7 +197,11 @@ impl Iterator for MysqlRowsIter<'_> {
                 let values = row.unwrap();
                 assert_eq!(values.len(), self.target_format.columns.len());
                 for (column, value) in std::iter::zip(&self.target_format.columns, values) {
-                    match Value::try_from((column, value)) {
+                    match TypeConverterT::mysql_read_value(type_converter::MysqlReadInput {
+                        table: &self.target_format.name,
+                        column,
+                        value,
+                    }) {
                         Ok(val) => result.push(val),
                         Err(e) => return Some(Err(e)),
                     }
@@ -173,7 +214,7 @@ impl Iterator for MysqlRowsIter<'_> {
     }
 }
 
-impl DBReader for MysqlDB {
+impl<TypeConverterT: MysqlTypeConverter> DBReader for MysqlDB<TypeConverterT> {
     fn read_iter(&mut self, target_format: TableInfo) -> anyhow::Result<ReaderIterator<'_>> {
         let query = format!(
             "SELECT {} FROM {}",
@@ -187,22 +228,30 @@ impl DBReader for MysqlDB {
         return Ok(Box::new(MysqlRowsIter {
             target_format,
             rows,
+            type_converter: std::marker::PhantomData::<TypeConverterT>,
         }));
     }
 }
 
-impl DBWriter for MysqlDB {
+impl<TypeConverterT: MysqlTypeConverter> DBWriter for MysqlDB<TypeConverterT> {
     fn opt_clone(&self) -> anyhow::Result<Box<dyn DBWriter>> {
-        return MysqlDB::new(&self.uri, self.type_options.clone())
-            .map(|writer| Box::new(writer) as _);
+        let new: MysqlDB<TypeConverterT> = MysqlDB::new(&self.uri, self.type_options.clone())?;
+        return Ok(Box::new(new));
     }
 
     fn write_batch(&mut self, batch: &[Row], table: &TableInfo) -> Result<(), WriterError> {
         let stmt = self.get_stmt(&table.name, batch[0].len(), batch.len())?;
         let mut values = Vec::with_capacity(batch[0].len() * batch.len());
         for row in batch {
-            for value in row {
-                values.push(mysql::Value::from(value));
+            for (value, column) in std::iter::zip(row, &table.columns) {
+                values.push(
+                    TypeConverterT::mysql_write_value(MysqlWriteInput {
+                        table: &table.name,
+                        column,
+                        value,
+                    })
+                    .context("Faild to convert data for mysql")?,
+                );
             }
         }
         self.connection

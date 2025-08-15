@@ -96,7 +96,7 @@ fn sqlite_types_compatability(
 #[rstest]
 fn sqlite_table_list() {
     let mut test_db = TestSqliteDatabase::new();
-    let mut db = SqliteDB::new(test_db.get_uri_raw().as_str()).unwrap();
+    let mut db: SqliteDB = SqliteDB::new(test_db.get_uri_raw().as_str()).unwrap();
 
     let tables = db.get_tables().unwrap();
     assert_eq!(tables.len(), 0);

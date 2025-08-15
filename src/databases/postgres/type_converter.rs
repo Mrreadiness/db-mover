@@ -2,7 +2,10 @@ use std::io::Write;
 
 use anyhow::Context;
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
-use postgres::types::{ToSql, Type};
+use postgres::{
+    CopyInWriter,
+    types::{ToSql, Type},
+};
 use rust_decimal::Decimal;
 
 use crate::databases::{
@@ -10,11 +13,44 @@ use crate::databases::{
     traits::WriterError,
 };
 
-impl TryFrom<Type> for ColumnType {
-    type Error = anyhow::Error;
+#[derive(Clone, Debug, PartialEq)]
+pub struct PostgresColumn {
+    pub table: String,
+    pub name: String,
+    pub column_type: postgres::types::Type,
+    pub nullable: bool,
+}
 
-    fn try_from(value: Type) -> Result<Self, Self::Error> {
-        let column_type = match value {
+pub struct PostgresReadInput<'a> {
+    pub table: &'a str,
+    pub column: &'a Column,
+    pub row: &'a postgres::Row,
+    pub column_index: usize,
+}
+
+pub struct PostgresWriteInput<'a> {
+    pub table: &'a str,
+    pub value: &'a Value,
+    pub column: &'a Column,
+    pub actual_column_type: postgres::types::Type,
+}
+
+pub const POSTGRES_EPOCH: NaiveDateTime = NaiveDate::from_ymd_opt(2000, 1, 1)
+    .unwrap()
+    .and_hms_opt(0, 0, 0)
+    .unwrap();
+
+pub trait PostgresTypeConverter: Send + 'static {
+    fn postgres_column(column: &PostgresColumn) -> anyhow::Result<Column> {
+        return Ok(Column {
+            name: column.name.clone(),
+            column_type: Self::postgres_column_type(column)?,
+            nullable: column.nullable,
+        });
+    }
+
+    fn postgres_column_type(column: &PostgresColumn) -> anyhow::Result<ColumnType> {
+        let column_type = match column.column_type {
             Type::INT8 => ColumnType::I64,
             Type::INT4 => ColumnType::I32,
             Type::INT2 => ColumnType::I16,
@@ -30,43 +66,26 @@ impl TryFrom<Type> for ColumnType {
             Type::TIME => ColumnType::Time,
             Type::JSON | Type::JSON_ARRAY | Type::JSONB | Type::JSONB_ARRAY => ColumnType::Json,
             Type::UUID => ColumnType::Uuid,
-            _ => return Err(anyhow::anyhow!("Unsupported postgres type {value}")),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Unsupported postgres type {}",
+                    column.column_type
+                ));
+            }
         };
         return Ok(column_type);
     }
-}
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct PostgreColumn {
-    pub name: String,
-    pub column_type: postgres::types::Type,
-    pub nullable: bool,
-}
-
-impl TryFrom<PostgreColumn> for Column {
-    type Error = anyhow::Error;
-
-    fn try_from(value: PostgreColumn) -> Result<Self, Self::Error> {
-        return Ok(Column {
-            name: value.name,
-            column_type: value.column_type.try_into()?,
-            nullable: value.nullable,
-        });
-    }
-}
-
-impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
-    type Error = anyhow::Error;
-
-    fn try_from(value: (ColumnType, &postgres::Row, usize)) -> Result<Self, Self::Error> {
-        let (column_type, row, idx) = value;
-        let real_columnt_type = &row.columns()[idx];
-        let value = match column_type {
+    fn postgres_read_value(input: PostgresReadInput) -> anyhow::Result<Value> {
+        let row = input.row;
+        let idx = input.column_index;
+        let real_column_type = &input.row.columns()[idx];
+        let value = match input.column.column_type {
             ColumnType::I64 => {
-                if real_columnt_type.type_() == &Type::INT2 {
+                if real_column_type.type_() == &Type::INT2 {
                     row.get::<_, Option<i16>>(idx)
                         .map_or(Value::Null, |val| Value::I64(val as i64))
-                } else if real_columnt_type.type_() == &Type::INT4 {
+                } else if real_column_type.type_() == &Type::INT4 {
                     row.get::<_, Option<i32>>(idx)
                         .map_or(Value::Null, |val| Value::I64(val as i64))
                 } else {
@@ -75,7 +94,7 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
                 }
             }
             ColumnType::I32 => {
-                if real_columnt_type.type_() == &Type::INT2 {
+                if real_column_type.type_() == &Type::INT2 {
                     row.get::<_, Option<i16>>(idx)
                         .map_or(Value::Null, |val| Value::I32(val as i32))
                 } else {
@@ -87,7 +106,7 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
                 .get::<_, Option<i16>>(idx)
                 .map_or(Value::Null, Value::I16),
             ColumnType::F64 => {
-                if real_columnt_type.type_() == &Type::FLOAT4 {
+                if real_column_type.type_() == &Type::FLOAT4 {
                     row.get::<_, Option<f32>>(idx)
                         .map_or(Value::Null, |val| Value::F64(val as f64))
                 } else {
@@ -128,44 +147,41 @@ impl TryFrom<(ColumnType, &postgres::Row, usize)> for Value {
             ColumnType::Uuid => row
                 .get::<_, Option<uuid::Uuid>>(idx)
                 .map_or(Value::Null, Value::Uuid),
+            ColumnType::Custom(ref name) => {
+                return Err(anyhow::anyhow!(
+                    "Custom type '{name}' is not supported by default PostgresTypeConverter"
+                ));
+            }
         };
         return Ok(value);
     }
-}
 
-const POSTGRES_EPOCH: NaiveDateTime = NaiveDate::from_ymd_opt(2000, 1, 1)
-    .unwrap()
-    .and_hms_opt(0, 0, 0)
-    .unwrap();
-
-impl Value {
-    pub(crate) fn write_postgres_bytes(
-        &self,
-        writer: &mut impl Write,
-        column: &PostgreColumn,
+    fn postgres_write_value(
+        writer: &mut CopyInWriter<'_>,
+        input: PostgresWriteInput,
     ) -> Result<(), WriterError> {
-        match self {
+        match &input.value {
             &Value::Null => {
                 writer.write_all(&(-1_i32).to_be_bytes())?;
             }
             &Value::I64(num) => {
-                writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
+                writer.write_all(&(size_of_val(num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
             &Value::I32(num) => {
-                writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
+                writer.write_all(&(size_of_val(num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
             &Value::I16(num) => {
-                writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
+                writer.write_all(&(size_of_val(num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
             &Value::F64(num) => {
-                writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
+                writer.write_all(&(size_of_val(num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
             &Value::F32(num) => {
-                writer.write_all(&(size_of_val(&num) as i32).to_be_bytes())?;
+                writer.write_all(&(size_of_val(num) as i32).to_be_bytes())?;
                 writer.write_all(&num.to_be_bytes())?;
             }
             &Value::Decimal(num) => {
@@ -176,7 +192,7 @@ impl Value {
                 writer.write_all(&buffer)?;
             }
             &Value::Bool(val) => {
-                let val = u8::from(val);
+                let val = u8::from(*val);
                 writer.write_all(&(size_of_val(&val) as i32).to_be_bytes())?;
                 writer.write_all(&val.to_be_bytes())?;
             }
@@ -213,7 +229,9 @@ impl Value {
             Value::Json(value) => {
                 let bytes =
                     serde_json::to_vec(value).context("Failed to serialize json into bytes")?;
-                if column.column_type == Type::JSONB || column.column_type == Type::JSONB_ARRAY {
+                if input.actual_column_type == Type::JSONB
+                    || input.actual_column_type == Type::JSONB_ARRAY
+                {
                     let jsonb_version = 1_u8;
                     let len = (bytes.len() + size_of_val(&jsonb_version)) as i32;
                     writer.write_all(&(len).to_be_bytes())?;
@@ -227,6 +245,12 @@ impl Value {
                 let bytes = val.as_bytes();
                 writer.write_all(&(bytes.len() as i32).to_be_bytes())?;
                 writer.write_all(bytes)?;
+            }
+            &Value::Custom(_) => {
+                return Err(WriterError::Unrecoverable(anyhow::anyhow!(
+                    "Custom Value for type {:?} is not supported by default PostgresTypeConverter",
+                    input.column.column_type
+                )));
             }
         };
         return Ok(());

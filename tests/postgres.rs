@@ -87,7 +87,7 @@ fn postgres_types_compatability(
 #[rstest]
 fn postgres_table_list() {
     let mut test_db = TestPostresDatabase::new();
-    let mut db = PostgresDB::new(&test_db.uri).unwrap();
+    let mut db: PostgresDB = PostgresDB::new(&test_db.uri).unwrap();
 
     let tables = db.get_tables().unwrap();
     assert_eq!(tables.len(), 0);

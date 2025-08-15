@@ -2,6 +2,7 @@ mod common;
 
 use std::{thread::sleep, time::Duration};
 
+use common::all_databases_combinations;
 use common::mysql::TestMysqlDatabase;
 use common::postgres::TestPostresDatabase;
 use common::sqlite::TestSqliteDatabase;
@@ -16,26 +17,6 @@ fn create_test_tables(in_db: &mut impl TestableDatabase, out_db: &mut impl Testa
     in_db.create_test_table("test1");
     out_db.create_test_table("test");
     out_db.create_test_table("test1");
-}
-
-#[template]
-#[rstest]
-fn all_databases_combinations(
-    #[values(
-        TestSqliteDatabase::new(),
-        TestPostresDatabase::new(),
-        TestMysqlDatabase::new_mysql(),
-        TestMysqlDatabase::new_mariadb()
-    )]
-    in_db: impl TestableDatabase,
-    #[values(
-        TestSqliteDatabase::new(),
-        TestPostresDatabase::new(),
-        TestMysqlDatabase::new_mysql(),
-        TestMysqlDatabase::new_mariadb()
-    )]
-    out_db: impl TestableDatabase,
-) {
 }
 
 #[apply(all_databases_combinations)]

@@ -125,7 +125,7 @@ impl TableMigrator {
                 return err;
             }
             let allowed = matches!(
-                (reader_column.column_type, writer_column.column_type),
+                (&reader_column.column_type, &writer_column.column_type),
                 (ColumnType::I16, ColumnType::I32 | ColumnType::I64)
                     | (ColumnType::I32, ColumnType::I64)
                     | (ColumnType::F32, ColumnType::F64)
